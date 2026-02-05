@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const FUGLE_BASE_URL = '/v1.0';
+const FUGLE_BASE_URL = 'https://api.fugle.tw/marketdata/v1.0';
 
 export interface StockTicker {
   symbol: string;
@@ -109,7 +109,7 @@ export const fetchQuote = async (symbol: string, apiKey: string): Promise<StockQ
 };
 
 // --- FinMind API Section ---
-const FINMIND_BASE_URL = '/finmind';
+const FINMIND_BASE_URL = 'https://api.finmindtrade.com/api/v4/data';
 
 export interface InstitutionalData {
   date: string;
