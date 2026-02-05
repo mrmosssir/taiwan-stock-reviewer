@@ -4,7 +4,7 @@ import { StockDetail } from './pages/StockDetail';
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/taiwan-stock-reviewer">
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/stock/:symbol" element={<StockDetail />} />
