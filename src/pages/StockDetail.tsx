@@ -12,12 +12,11 @@ import type {
   StockCandle,
   InstitutionalData,
   MarginData,
-  FinancialStatementData,
   ComprehensiveFinancials
 } from '../api';
 import { KLineChart } from '../components/KLineChart';
 import { MarginChart } from '../components/MarginChart';
-import { ArrowLeft, Users, CreditCard, PieChart, TrendingUp, TrendingDown, BarChart3, Activity, Wallet } from 'lucide-react';
+import { ArrowLeft, Users, CreditCard, PieChart, TrendingUp, BarChart3, Activity, Wallet } from 'lucide-react';
 
 export const StockDetail: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();

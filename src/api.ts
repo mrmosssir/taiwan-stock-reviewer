@@ -193,7 +193,7 @@ export const fetchMarginTrading = async (symbol: string, days: number = 45): Pro
     const rawData = response.data.data;
     if (!rawData || !Array.isArray(rawData)) return [];
 
-    return rawData.map((item: any, index: number) => {
+    return rawData.map((item: any) => {
       const marginBalance = Number(item.MarginPurchaseTodayBalance) || 0;
       const shortBalance = Number(item.ShortSaleTodayBalance) || 0;
       const prevMargin = Number(item.MarginPurchaseYesterdayBalance) || 0;
