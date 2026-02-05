@@ -2,8 +2,6 @@
 
 StockReview 是一個現代化的台股分析 Web 應用程式，旨在提供投資人一個乾淨、快速且功能強大的看盤介面。整合了即時報價、專業 K 線圖、技術指標分析、籌碼面追蹤以及基本面財報數據。
 
-![StockReview Screenshot](https://images.unsplash.com/photo-1611974765270-cab0330035fa?auto=format&fit=crop&q=80&w=1000)
-
 ## 🚀 功能特色
 
 *   **即時行情追蹤**：
