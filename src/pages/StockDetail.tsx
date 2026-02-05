@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
   fetchTicker, 
@@ -17,6 +17,7 @@ import type {
 import { KLineChart } from '../components/KLineChart';
 import { MarginChart } from '../components/MarginChart';
 import { ArrowLeft, Users, CreditCard, PieChart, TrendingUp, BarChart3, Activity, Wallet } from 'lucide-react';
+import { calculateSignals } from '../utils/signals';
 
 export const StockDetail: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();
@@ -40,6 +41,11 @@ export const StockDetail: React.FC = () => {
   const [finTab, setFinTab] = useState<'profit' | 'revenue' | 'strength' | 'cash'>('profit');
 
   const oldestDateRef = useRef<string | null>(null);
+
+  // Calculate signals
+  const markers = useMemo(() => {
+    return calculateSignals(candles, institutional);
+  }, [candles, institutional]);
 
   useEffect(() => {
     if (candles.length > 0) {
@@ -76,8 +82,8 @@ export const StockDetail: React.FC = () => {
         const [tickerData, candlesData, instData, marginData, finData] = await Promise.all([
           fetchTicker(symbol, apiKey),
           fetchHistoricalCandles(symbol, apiKey, timeframe, 180),
-          fetchInstitutionalInvestors(symbol, 45),
-          fetchMarginTrading(symbol, 45),
+          fetchInstitutionalInvestors(symbol, 200),
+          fetchMarginTrading(symbol, 200),
           fetchFinancialStatements(symbol)
         ]);
         setTicker(tickerData);
@@ -146,7 +152,7 @@ export const StockDetail: React.FC = () => {
           </div>
         </div>
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 h-[500px] mb-8">
-           <KLineChart data={candles} indicators={indicators} onLoadMore={loadMoreData} />
+           <KLineChart data={candles} indicators={indicators} markers={markers} onLoadMore={loadMoreData} />
         </div>
 
         {/* Info Grid */}

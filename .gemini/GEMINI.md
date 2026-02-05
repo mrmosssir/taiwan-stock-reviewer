@@ -35,8 +35,30 @@ This document serves as a context memory for AI agents (Gemini, ChatGPT, Claude)
 | :--- | :--- | :--- |
 | `src/api.ts` | **The Brain.** Handles all external data fetching, normalizing, and type definitions. | **Always** check here for field mappings (especially FinMind Chinese keys) before debugging "missing data". |
 | `src/pages/StockDetail.tsx` | **The Coordinator.** Orchestrates data loading (Promise.all), manages state for tabs, and handles infinite scroll triggers. | Watch out for `useEffect` dependency arrays when handling the `loadMoreData` closure. |
-| `src/components/KLineChart.tsx` | **The Visualizer.** Wraps Lightweight Charts. | Handles the complex logic of dynamic series updates (MA/BB/MACD) and data merging. |
+| `src/components/KLineChart.tsx` | **The Visualizer.** Wraps Lightweight Charts. | Handles the complex logic of dynamic series updates (MA/BB/MACD) and data merging. Now supports Trading Signals via `createSeriesMarkers` plugin. |
+| `src/utils/signals.ts` | **The Analyst.** Signal generation logic. | Implements a state-machine based trend analysis (Start, Add, Exit, Short) using Technical and Chip data. |
 | `vite.config.ts` | **The Gateway.** Configures the Proxy Server. | Modify this if you add a new external API domain. |
+
+## 📈 Trading Signal System (Master Logic)
+
+The system uses a **State Machine** to track trends and prevent conflicting signals.
+
+### 1. Long Start (做多啟動)
+*   **Price**: Close crosses above MA20 (Life Line).
+*   **Momentum**: MACD Histogram > 0 OR KD Golden Cross (K > D).
+*   **Support**: Institutional Net Buy OR Volume > 1.2x of 5-day average.
+
+### 2. Exit Strategy (平多/平空)
+*   **Grace Period**: 6-day protection after start (only exits on MA60 break with 3% buffer).
+*   **Standard Exit**: Requires BOTH Price breakdown (MA20) AND Institutional selling.
+*   **High Profit Protection (>40% gain)**:
+    *   Exits immediately on MA10 break.
+    *   Exits on **Big Black Candle** (Body drop > 7%).
+    *   Exits on **Peak Pullback** (Drop > 10% from highest point).
+
+### 3. Add Positions (加碼)
+*   **Long Add**: Multi-MA Bullish Array (5>10>20) + Price touches MA20 + No heavy selling.
+*   **Short Add**: Bearish Array (5<10<20) + Price bounces to MA20 + No heavy buying.
 
 ## 📝 Development Guidelines for AI
 

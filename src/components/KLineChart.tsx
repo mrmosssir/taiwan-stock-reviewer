@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { 
   createChart, 
-  ColorType, 
-  CandlestickSeries, 
-  LineSeries, 
-  HistogramSeries 
+  ColorType,
+  CandlestickSeries,
+  LineSeries,
+  HistogramSeries,
+  createSeriesMarkers
 } from 'lightweight-charts';
-import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, Time, SeriesMarker } from 'lightweight-charts';
 import type { StockCandle } from '../api';
 import { SMA, BollingerBands, MACD } from 'technicalindicators';
 
@@ -18,10 +19,11 @@ interface KLineChartProps {
     macd: boolean;
     kd: boolean;
   };
+  markers?: SeriesMarker<Time>[];
   onLoadMore?: () => void;
 }
 
-export const KLineChart: React.FC<KLineChartProps> = ({ data, indicators, onLoadMore }) => {
+export const KLineChart: React.FC<KLineChartProps> = ({ data, indicators, markers, onLoadMore }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const isLoadingMoreRef = useRef(false);
@@ -133,6 +135,11 @@ export const KLineChart: React.FC<KLineChartProps> = ({ data, indicators, onLoad
         low: d.low,
         close: d.close,
       })));
+
+      if (markers && markers.length > 0) {
+        createSeriesMarkers(candlestickSeries, markers);
+      }
+      
       activeSeries.push(candlestickSeries);
 
       if (data.length < 200 && !isLoadingMoreRef.current) {
@@ -197,7 +204,7 @@ export const KLineChart: React.FC<KLineChartProps> = ({ data, indicators, onLoad
         } catch (e) {}
       }
     };
-  }, [data, indicators]);
+  }, [data, indicators, markers]);
 
   return <div ref={chartContainerRef} className="w-full h-full" />;
 };
