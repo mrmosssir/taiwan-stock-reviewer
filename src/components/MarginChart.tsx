@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, LineSeries } from 'lightweight-charts';
 import type { IChartApi, Time } from 'lightweight-charts';
 import type { MarginData } from '../api';
@@ -10,6 +10,40 @@ interface MarginChartProps {
 export const MarginChart: React.FC<MarginChartProps> = ({ data }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(() => document.documentElement.classList.contains('dark'));
+
+  useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          setIsDarkMode(document.documentElement.classList.contains('dark'));
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, { attributes: true });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.applyOptions({
+        layout: {
+          textColor: isDarkMode ? '#9ca3af' : '#64748b',
+        },
+        grid: {
+          vertLines: { color: isDarkMode ? '#1f2937' : '#f1f5f9' },
+          horzLines: { color: isDarkMode ? '#1f2937' : '#f1f5f9' },
+        },
+        timeScale: {
+          borderColor: isDarkMode ? '#374151' : '#e2e8f0',
+        },
+        rightPriceScale: {
+          borderColor: isDarkMode ? '#374151' : '#e2e8f0',
+        }
+      });
+    }
+  }, [isDarkMode]);
 
   useEffect(() => {
     if (!chartContainerRef.current || data.length === 0) return;
@@ -17,19 +51,19 @@ export const MarginChart: React.FC<MarginChartProps> = ({ data }) => {
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#64748b',
+        textColor: isDarkMode ? '#9ca3af' : '#64748b',
       },
       width: chartContainerRef.current.clientWidth,
       height: 200,
       grid: {
-        vertLines: { color: '#f1f5f9' },
-        horzLines: { color: '#f1f5f9' },
+        vertLines: { color: isDarkMode ? '#1f2937' : '#f1f5f9' },
+        horzLines: { color: isDarkMode ? '#1f2937' : '#f1f5f9' },
       },
       timeScale: {
-        borderColor: '#e2e8f0',
+        borderColor: isDarkMode ? '#374151' : '#e2e8f0',
       },
       rightPriceScale: {
-        borderColor: '#e2e8f0',
+        borderColor: isDarkMode ? '#374151' : '#e2e8f0',
       }
     });
 

@@ -21,9 +21,10 @@ interface KLineChartProps {
   };
   markers?: SeriesMarker<Time>[];
   onLoadMore?: () => void;
+  isDarkMode?: boolean;
 }
 
-export const KLineChart: React.FC<KLineChartProps> = ({ data, indicators, markers, onLoadMore }) => {
+export const KLineChart: React.FC<KLineChartProps> = ({ data, indicators, markers, onLoadMore, isDarkMode = false }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const isLoadingMoreRef = useRef(false);
@@ -34,17 +35,17 @@ export const KLineChart: React.FC<KLineChartProps> = ({ data, indicators, marker
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: 'white' },
-        textColor: 'black',
+        background: { type: ColorType.Solid, color: isDarkMode ? '#111827' : 'white' },
+        textColor: isDarkMode ? '#9ca3af' : 'black',
       },
       width: chartContainerRef.current.clientWidth,
       height: 460,
       grid: {
-        vertLines: { color: '#f0f0f0' },
-        horzLines: { color: '#f0f0f0' },
+        vertLines: { color: isDarkMode ? '#1f2937' : '#f0f0f0' },
+        horzLines: { color: isDarkMode ? '#1f2937' : '#f0f0f0' },
       },
       timeScale: {
-        borderColor: '#e1e1e1',
+        borderColor: isDarkMode ? '#374151' : '#e1e1e1',
         timeVisible: true,
         fixRightEdge: true,
       },
@@ -80,6 +81,25 @@ export const KLineChart: React.FC<KLineChartProps> = ({ data, indicators, marker
       }
     };
   }, []);
+
+  // Update Theme
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.applyOptions({
+        layout: {
+          background: { type: ColorType.Solid, color: isDarkMode ? '#111827' : 'white' },
+          textColor: isDarkMode ? '#9ca3af' : 'black',
+        },
+        grid: {
+          vertLines: { color: isDarkMode ? '#1f2937' : '#f0f0f0' },
+          horzLines: { color: isDarkMode ? '#1f2937' : '#f0f0f0' },
+        },
+        timeScale: {
+          borderColor: isDarkMode ? '#374151' : '#e1e1e1',
+        },
+      });
+    }
+  }, [isDarkMode]);
 
   // Update Data and Indicators
   useEffect(() => {
