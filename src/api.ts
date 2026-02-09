@@ -114,6 +114,9 @@ const FINMIND_BASE_URL = 'https://api.finmindtrade.com/api/v4/data';
 export interface InstitutionalData {
   date: string;
   net: number;
+  netForeign: number;
+  netTrust: number;
+  netDealer: number;
 }
 
 export interface MarginData {
@@ -161,14 +164,31 @@ export const fetchInstitutionalInvestors = async (symbol: string, days: number =
 
     const grouped = rawData.reduce((acc: any, item: any) => {
       const net = (Number(item.buy) || 0) - (Number(item.sell) || 0);
-      if (!acc[item.date]) acc[item.date] = 0;
-      acc[item.date] += net;
+      const name = item.name;
+
+      if (!acc[item.date]) {
+        acc[item.date] = { net: 0, netForeign: 0, netTrust: 0, netDealer: 0 };
+      }
+      
+      acc[item.date].net += net;
+
+      if (name === 'Foreign_Investor' || name === 'Foreign_Dealer_Self') {
+        acc[item.date].netForeign += net;
+      } else if (name === 'Investment_Trust') {
+        acc[item.date].netTrust += net;
+      } else if (name && (name.includes('Dealer') || name.includes('Self'))) {
+        acc[item.date].netDealer += net;
+      }
+
       return acc;
     }, {});
 
     return Object.keys(grouped).map(date => ({
       date,
-      net: grouped[date]
+      net: grouped[date].net,
+      netForeign: grouped[date].netForeign,
+      netTrust: grouped[date].netTrust,
+      netDealer: grouped[date].netDealer,
     })).sort((a, b) => a.date.localeCompare(b.date));
   } catch (error) {
     console.error('FinMind Institutional Fetch Error:', error);
