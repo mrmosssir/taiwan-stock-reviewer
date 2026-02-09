@@ -24,7 +24,13 @@ interface KLineChartProps {
   isDarkMode?: boolean;
 }
 
-export const KLineChart: React.FC<KLineChartProps> = ({ data, indicators, markers, onLoadMore, isDarkMode = false }) => {
+export const KLineChart: React.FC<KLineChartProps> = ({ 
+  data, 
+  indicators, 
+  markers, 
+  onLoadMore, 
+  isDarkMode = false 
+}) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const isLoadingMoreRef = useRef(false);

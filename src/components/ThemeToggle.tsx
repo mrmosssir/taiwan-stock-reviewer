@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 export const ThemeToggle = () => {
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
-      return document.documentElement.classList.contains('dark') || 
-             localStorage.getItem('theme') === 'dark';
+      const saved = localStorage.getItem('theme');
+      if (saved) return saved === 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
     return false;
   });
@@ -19,12 +20,14 @@ export const ThemeToggle = () => {
       root.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     }
+    // Dispatch custom event for components like KLineChart
+    window.dispatchEvent(new Event('theme-change'));
   }, [isDark]);
 
   return (
     <button
-      onClick={() => setIsDark(!isDark)}
-      className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400"
+      onClick={() => setIsDark(prev => !prev)}
+      className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400 cursor-pointer"
       aria-label="Toggle theme"
     >
       {isDark ? <Sun size={20} /> : <Moon size={20} />}

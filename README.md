@@ -10,10 +10,12 @@ StockReview 是一個現代化的台股分析 Web 應用程式，旨在提供投
     *   串接 **Fugle 富果行情 API**。
 
 *   **專業技術分析 (K 線圖)**：
-    *   整合 **TradingView Lightweight Charts**。
+    *   整合 **TradingView Lightweight Charts v5**。
+    *   **主題同步**：完整支援深色/淺色模式切換，圖表背景與配色自動適應。
     *   支援日線、週線、月線切換。
     *   **無限捲動 (Infinite Scroll)**：自動載入歷史資料，流暢回溯。
     *   **技術指標**：可開關的均線 (SMA)、布林通道 (Bollinger Bands)、MACD、KD。
+    *   **自動化訊號**：圖表自動標註進出場訊號（起漲、破前高、布林開口、投信連買等）。
     *   成交量副圖。
 
 *   **籌碼面分析 (Institutional & Margin)**：
@@ -31,7 +33,9 @@ StockReview 是一個現代化的台股分析 Web 應用程式，旨在提供投
 
 *   **Frontend Framework**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
 *   **Build Tool**: [Vite](https://vitejs.dev/)
-*   **Styling**: [Tailwind CSS v4](https://tailwindcss.com/) (使用 `@import "tailwindcss";` 新語法)
+*   **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
+    *   使用新版 `@import "tailwindcss";` 語法。
+    *   手動配置 `@variant dark` 以支援 Class-based Dark Mode。
 *   **Charts**: [Lightweight Charts v5](https://tradingview.github.io/lightweight-charts/) (TradingView)
 *   **Icons**: [Lucide React](https://lucide.dev/)
 *   **Routing**: React Router v7
@@ -74,8 +78,12 @@ StockReview 是一個現代化的台股分析 Web 應用程式，旨在提供投
 ```
 src/
 ├── api.ts              # 核心資料層 (Fugle & FinMind 整合)
+├── index.css           # Tailwind v4 配置 (@variant dark)
+├── utils/
+│   └── signals.ts      # 交易訊號判斷邏輯 (State Machine)
 ├── components/         # UI 元件
-│   ├── KLineChart.tsx  # K 線圖 (包含指標計算與無限載入邏輯)
+│   ├── KLineChart.tsx  # K 線圖 (支援深色模式同步)
+│   ├── ThemeToggle.tsx # 主題切換按鈕 (發送 theme-change 事件)
 │   ├── MarginChart.tsx # 融資融券走勢圖
 │   └── StockRow.tsx    # 列表單列元件
 ├── pages/              # 頁面元件

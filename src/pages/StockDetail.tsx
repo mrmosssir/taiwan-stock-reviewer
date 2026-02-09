@@ -42,16 +42,19 @@ export const StockDetail: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(() => document.documentElement.classList.contains('dark'));
 
   useEffect(() => {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
-          setIsDarkMode(document.documentElement.classList.contains('dark'));
-        }
-      });
-    });
+    const handleThemeChange = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    };
 
-    observer.observe(document.documentElement, { attributes: true });
-    return () => observer.disconnect();
+    window.addEventListener('theme-change', handleThemeChange);
+    // Also listen for potential manual class changes
+    const observer = new MutationObserver(handleThemeChange);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+    return () => {
+      window.removeEventListener('theme-change', handleThemeChange);
+      observer.disconnect();
+    };
   }, []);
 
   const [finTab, setFinTab] = useState<'profit' | 'revenue' | 'strength' | 'cash'>('profit');
@@ -171,7 +174,13 @@ export const StockDetail: React.FC = () => {
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 h-[500px] mb-8">
-           <KLineChart data={candles} indicators={indicators} markers={markers} onLoadMore={loadMoreData} isDarkMode={isDarkMode} />
+           <KLineChart 
+             data={candles} 
+             indicators={indicators} 
+             markers={markers} 
+             onLoadMore={loadMoreData} 
+             isDarkMode={isDarkMode} 
+           />
         </div>
 
         {/* Info Grid */}
