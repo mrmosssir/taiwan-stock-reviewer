@@ -6,6 +6,7 @@ import {
   fetchInstitutionalInvestors,
   fetchMarginTrading,
   fetchFinancialStatements,
+  fetchQuote,
 } from '../api';
 import type { 
   StockTicker, 
@@ -93,20 +94,107 @@ export const StockDetail: React.FC = () => {
     }
   };
 
+  // 盤中即時更新 (每 15 秒輪詢一次)
+  useEffect(() => {
+    if (!symbol || !apiKey || timeframe !== 'D') return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const quoteData = await fetchQuote(symbol, apiKey);
+        if (!quoteData || quoteData.lastPrice <= 0) return;
+
+        const d = quoteData.lastUpdated ? new Date(quoteData.lastUpdated) : new Date();
+        const quoteDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+        setCandles(prevCandles => {
+          if (prevCandles.length === 0) return prevCandles;
+          
+          const newCandles = [...prevCandles];
+          const lastCandle = { ...newCandles[newCandles.length - 1] };
+
+          if (lastCandle.date === quoteDate) {
+            // 若數值皆相同則不觸發 re-render
+            if (
+              lastCandle.close === quoteData.lastPrice &&
+              lastCandle.high === Math.max(lastCandle.high, quoteData.high || quoteData.lastPrice) &&
+              lastCandle.low === Math.min(lastCandle.low, quoteData.low || quoteData.lastPrice) &&
+              lastCandle.volume === (quoteData.volume || lastCandle.volume)
+            ) {
+              return prevCandles;
+            }
+
+            lastCandle.close = quoteData.lastPrice;
+            lastCandle.high = Math.max(lastCandle.high, quoteData.high || quoteData.lastPrice);
+            lastCandle.low = Math.min(lastCandle.low, quoteData.low || quoteData.lastPrice);
+            lastCandle.volume = quoteData.volume || lastCandle.volume;
+            
+            newCandles[newCandles.length - 1] = lastCandle;
+            return newCandles;
+          } else if (lastCandle.date < quoteDate) {
+            newCandles.push({
+              date: quoteDate,
+              open: quoteData.open || quoteData.lastPrice,
+              high: quoteData.high || quoteData.lastPrice,
+              low: quoteData.low || quoteData.lastPrice,
+              close: quoteData.lastPrice,
+              volume: quoteData.volume || 0,
+            });
+            return newCandles;
+          }
+
+          return prevCandles;
+        });
+      } catch (error) {
+        console.error('Error fetching intraday quote:', error);
+      }
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, [symbol, apiKey, timeframe]);
+
   useEffect(() => {
     const loadAllData = async () => {
       if (!symbol || !apiKey) return;
       setLoading(true);
       try {
-        const [tickerData, candlesData, instData, marginData, finData] = await Promise.all([
+        const [tickerData, candlesData, instData, marginData, finData, quoteData] = await Promise.all([
           fetchTicker(symbol, apiKey),
           fetchHistoricalCandles(symbol, apiKey, timeframe, 180),
           fetchInstitutionalInvestors(symbol, 200),
           fetchMarginTrading(symbol, 200),
-          fetchFinancialStatements(symbol)
+          fetchFinancialStatements(symbol),
+          fetchQuote(symbol, apiKey).catch(() => null)
         ]);
+
+        let finalCandles = [...candlesData];
+        
+        // 初始載入時，整合即時報價至 K 線
+        if (quoteData && timeframe === 'D' && quoteData.lastPrice > 0) {
+          const d = quoteData.lastUpdated ? new Date(quoteData.lastUpdated) : new Date();
+          const quoteDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          
+          if (finalCandles.length > 0) {
+            const lastCandle = finalCandles[finalCandles.length - 1];
+            if (lastCandle.date === quoteDate) {
+              lastCandle.close = quoteData.lastPrice;
+              lastCandle.high = Math.max(lastCandle.high, quoteData.high || quoteData.lastPrice);
+              lastCandle.low = Math.min(lastCandle.low, quoteData.low || quoteData.lastPrice);
+              lastCandle.volume = quoteData.volume || lastCandle.volume;
+            } else if (lastCandle.date < quoteDate) {
+              finalCandles.push({
+                date: quoteDate,
+                open: quoteData.open || quoteData.lastPrice,
+                high: quoteData.high || quoteData.lastPrice,
+                low: quoteData.low || quoteData.lastPrice,
+                close: quoteData.lastPrice,
+                volume: quoteData.volume || 0,
+              });
+            }
+          }
+        }
+
         setTicker(tickerData);
-        setCandles(candlesData);
+        setCandles(finalCandles);
         setInstitutional(instData);
         setMargin(marginData);
         setFinancials(finData as ComprehensiveFinancials);

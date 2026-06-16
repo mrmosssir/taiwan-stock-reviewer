@@ -327,7 +327,7 @@ export const calculateSignals = (
       const bias = (close - m20) / m20;
       const safeBias = bias < 0.05;
 
-      if (bullishArray && touchMa20 && instNet >= 0 && safeBias) {
+      if (bullishArray && touchMa20 && instNet > 0 && safeBias) {
         markers.push({
           time: date as Time,
           position: 'belowBar',
