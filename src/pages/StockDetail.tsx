@@ -64,8 +64,8 @@ export const StockDetail: React.FC = () => {
 
   // Calculate signals
   const markers = useMemo(() => {
-    return calculateSignals(candles, institutional);
-  }, [candles, institutional]);
+    return calculateSignals(candles, institutional, ticker, financials);
+  }, [candles, institutional, ticker, financials]);
 
   useEffect(() => {
     if (candles.length > 0) {
@@ -81,7 +81,7 @@ export const StockDetail: React.FC = () => {
     oldestDate.setDate(oldestDate.getDate() - 1);
     const newTo = oldestDate.toISOString().split('T')[0];
     try {
-      const newCandles = await fetchHistoricalCandles(symbol, apiKey, timeframe, 180, newTo);
+      const newCandles = await fetchHistoricalCandles(symbol, apiKey, timeframe, 360, newTo);
       if (newCandles.length > 0) {
         setCandles(current => {
           const combined = [...newCandles, ...current];
@@ -159,9 +159,9 @@ export const StockDetail: React.FC = () => {
       try {
         const [tickerData, candlesData, instData, marginData, finData, quoteData] = await Promise.all([
           fetchTicker(symbol, apiKey),
-          fetchHistoricalCandles(symbol, apiKey, timeframe, 180),
-          fetchInstitutionalInvestors(symbol, 200),
-          fetchMarginTrading(symbol, 200),
+          fetchHistoricalCandles(symbol, apiKey, timeframe, 360),
+          fetchInstitutionalInvestors(symbol, 360),
+          fetchMarginTrading(symbol, 360),
           fetchFinancialStatements(symbol),
           fetchQuote(symbol, apiKey).catch(() => null)
         ]);

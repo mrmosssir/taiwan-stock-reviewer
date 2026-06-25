@@ -35,7 +35,7 @@ export const fetchHistoricalCandles = async (
   symbol: string,
   apiKey: string,
   timeframe: string = 'D',
-  rangeDays: number = 180,
+  rangeDays: number = 360,
   endDateStr?: string
 ): Promise<StockCandle[]> => {
   const end = endDateStr ? new Date(endDateStr) : new Date();
