@@ -129,6 +129,7 @@ export const calculateSignals = (
     const close = closes[i];
     const openPrice = candles[i].open;
     const prevClose = closes[i-1];
+    const prev2Close = closes[i-2];
     const high = highs[i];
     const low = lows[i];
     const vol = volumes[i];
@@ -181,8 +182,8 @@ export const calculateSignals = (
       let shouldExit = false;
 
       if (isLargeCap) {
-        // 大型權值股平倉防護：走勢穩定，需連續 2 日跌破 MA20，或跌破 MA20 且伴隨法人強力連續賣超
-        const breakdownMA20 = (close < m20 && prevClose < m20) || (close < m20 * 0.99 && major3DaysNet < 0);
+        // 大型權值股平倉防護：走勢穩定，需連續 3 日跌破 MA20，或跌破 MA20 且伴隨法人強力連續賣超
+        const breakdownMA20 = (close < m20 && prevClose < m20 && prev2Close < m20) || (close < m20 * 0.99 && major3DaysNet < 0);
         // 破前 20 日波段低點
         const prev20Low = Math.min(...lows.slice(i-20, i));
         const structureBreak = close < prev20Low;
@@ -192,7 +193,7 @@ export const calculateSignals = (
         shouldExit = breakdownMA20 || structureBreak || strictStop;
       } else {
         // 中小型飆股平倉防護：防甩轎與爆量長黑防護
-        const breakdownMA20 = (close < m20 && prevClose < m20) || (close < m20 * 0.98 && (instToday.net < 0 || major3DaysNet < 0));
+        const breakdownMA20 = (close < m20 && prevClose < m20 && prev2Close < m20) || (close < m20 * 0.98 && (instToday.net < 0 || major3DaysNet < 0));
         const prev15Low = Math.min(...lows.slice(i-15, i));
         const structureBreak = close < prev15Low;
         const isClimaxSubside = (openPrice - close) / openPrice > 0.05 && 
