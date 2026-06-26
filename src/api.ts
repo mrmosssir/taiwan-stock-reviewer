@@ -8,6 +8,7 @@ export interface StockTicker {
   type: string;
   exchange: string;
   market: string;
+  issuedShares?: number;
 }
 
 export interface StockQuote {
@@ -81,12 +82,27 @@ export const fetchTicker = async (symbol: string, apiKey: string): Promise<Stock
   const response = await axios.get(`${FUGLE_BASE_URL}/stock/intraday/ticker/${symbol}`, {
     headers: { 'X-API-KEY': apiKey },
   });
+  let issuedShares = 0;
+  try {
+    const fmRes = await axios.get('https://api.finmindtrade.com/api/v4/data', {
+      params: { dataset: 'TaiwanStockInfo', data_id: symbol }
+    });
+    if (Array.isArray(fmRes.data?.data)) {
+      const item = fmRes.data.data.find((s: any) => s.stock_id === symbol);
+      if (item && item.issued_shares) {
+        issuedShares = Number(item.issued_shares);
+      }
+    }
+  } catch (e) {
+    console.error('Error fetching issued_shares from FinMind:', e);
+  }
   return {
     symbol: response.data.symbol,
     name: response.data.name,
     type: response.data.type,
     exchange: response.data.exchange,
     market: response.data.market,
+    issuedShares,
   };
 };
 

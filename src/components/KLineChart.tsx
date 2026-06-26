@@ -175,8 +175,8 @@ export const KLineChart: React.FC<KLineChartProps> = ({
       // Indicators (MA, BB, MACD logic same as before but safe with series management)
       if (indicators.ma) {
         const closePrices = data.map(d => d.close);
-        [5, 20, 60].forEach((period, idx) => {
-          const colors = ['#f59e0b', '#8b5cf6', '#3b82f6'];
+        [5, 10, 20, 60].forEach((period, idx) => {
+          const colors = ['#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6'];
           const maValues = SMA.calculate({ period, values: closePrices });
           if (maValues && maValues.length > 0) {
             const series = chart.addSeries(LineSeries, { color: colors[idx], lineWidth: 1, title: `MA${period}` });

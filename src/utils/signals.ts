@@ -14,7 +14,7 @@ const normalizeDate = (d: string) => d.split('T')[0].replace(/\//g, '-');
 
 type TrendState = 'long' | null;
 
-// 動態判定是否為大型權值股
+// 動態判定是否為大型權值股 (方案 A：股票市值判定)
 const isLargeCapStock = (
   candles: StockCandle[],
   ticker: StockTicker | null,
@@ -25,31 +25,33 @@ const isLargeCapStock = (
     return false;
   }
 
-  // 1. 計算近期平均每日成交金額 (20日均量 Turnover)
-  let avgTurnover = 0;
-  const recentCandles = candles.slice(-20);
-  if (recentCandles.length > 0) {
-    const totalTurnover = recentCandles.reduce((acc, c) => acc + (c.close * c.volume), 0);
-    avgTurnover = totalTurnover / recentCandles.length;
-  }
-
-  // 2. 檢查最新季營收規模 (Revenue)
-  let latestRevenue = 0;
-  if (financials && financials.revenue.length > 0) {
-    latestRevenue = financials.revenue[financials.revenue.length - 1].value;
-  }
-
-  // 3. 權值巨頭代號作為輔助防呆確認
+  // 1. 權值巨頭代號作為預設確認
   const megaCapSymbols = ['2330', '2317', '2454', '2308', '2337', '2382', '2881', '2882', '2891', '2412', '2886', '2884', '2892', '1301', '1303', '2002'];
   if (ticker && megaCapSymbols.includes(ticker.symbol)) {
     return true;
   }
 
-  // 動態門檻判定：若季營收超過 200 億，或近20日平均每日 turnover 超過 5 億
-  if (latestRevenue > 20000000000 || avgTurnover > 500000000) {
+  // 2. 動態股票市值判定 (方案 A：當日收盤價 * 發行股數)
+  if (ticker && ticker.issuedShares && ticker.issuedShares > 0 && candles.length > 0) {
+    const latestClose = candles[candles.length - 1].close;
+    const marketCap = latestClose * ticker.issuedShares;
+    // 市值大於 1,000 億台幣視為大型權值股
+    if (marketCap > 100000000000) {
+      return true;
+    }
+    return false;
+  }
+
+  // 3. 備援判定：檢查最新季營收規模 (Revenue) > 200億
+  let latestRevenue = 0;
+  if (financials && financials.revenue.length > 0) {
+    latestRevenue = financials.revenue[financials.revenue.length - 1].value;
+  }
+  if (latestRevenue > 20000000000) {
     return true;
   }
 
+  // 移除了易受短線暴增干擾的 avgTurnover > 5億 條件，確保妖股爆量不會被誤判為大型股
   return false;
 };
 
@@ -192,16 +194,34 @@ export const calculateSignals = (
 
         shouldExit = breakdownMA20 || structureBreak || strictStop;
       } else {
-        // 中小型飆股平倉防護：防甩轎與爆量長黑防護
-        const breakdownMA20 = (close < m20 && prevClose < m20 && prev2Close < m20) || (close < m20 * 0.98 && (instToday.net < 0 || major3DaysNet < 0));
-        const prev15Low = Math.min(...lows.slice(i-15, i));
-        const structureBreak = close < prev15Low;
+        // 中小型飆股平倉防護：三階層動態停利架構 (3-Tier Position Management)
+        const maxGain = startPrice > 0 ? (highestPrice - startPrice) / startPrice : 0;
         const isClimaxSubside = (openPrice - close) / openPrice > 0.05 && 
                                  (vol / m5v > 3.0) && 
-                                 (close - low) / (high - low) < 0.15;
+                                 (close - low) / (high - low) < 0.15 &&
+                                 (close < m10);
         const strictStop = trendDuration <= 10 && (close < startPrice * 0.92);
 
-        shouldExit = breakdownMA20 || structureBreak || isClimaxSubside || strictStop;
+        if (maxGain > 0.40) {
+          // 【第三層：主升狂飆期】(maxGain > 40%) - 跌破 10MA 兩天內站不回去
+          const prevM10 = ma10[i-1] ?? 0;
+          const breakdownMA10TwoDays = close < m10 && prevClose < prevM10;
+          const breakdownMA20 = close < m20;
+          const trailingStop = close < highestPrice * 0.85 && close < m10;
+          shouldExit = breakdownMA10TwoDays || breakdownMA20 || trailingStop || isClimaxSubside;
+        } else if (maxGain >= 0.15) {
+          // 【第二層：波段防衛與成長期】(15% <= maxGain <= 40%) - 縮短月線觀察期與底型防護
+          const breakdownMA20 = (close < m20 && prevClose < m20) || (close < m20 && major3DaysNet < 0);
+          const prev8Low = Math.min(...lows.slice(i-8, i));
+          const structureBreak = close < prev8Low;
+          shouldExit = breakdownMA20 || structureBreak || isClimaxSubside;
+        } else {
+          // 【第一層：底部洗盤期】(maxGain < 15%) - 容忍震盪，啟動防甩轎機制
+          const breakdownMA20 = (close < m20 && prevClose < m20 && prev2Close < m20) || (close < m20 * 0.98 && (instToday.net < 0 || major3DaysNet < 0));
+          const prev15Low = Math.min(...lows.slice(i-15, i));
+          const structureBreak = close < prev15Low;
+          shouldExit = breakdownMA20 || structureBreak || isClimaxSubside || strictStop;
+        }
       }
 
       if (shouldExit) {
