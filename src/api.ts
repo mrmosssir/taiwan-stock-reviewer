@@ -32,6 +32,54 @@ export interface StockCandle {
   volume: number;
 }
 
+export interface DividendData {
+  date: string;
+  beforePrice: number;
+  afterPrice: number;
+}
+
+export const adjustCandles = (candles: StockCandle[], dividends: DividendData[]): StockCandle[] => {
+  if (!dividends || dividends.length === 0 || !candles || candles.length === 0) return candles;
+  
+  const sortedDividends = [...dividends].sort((a, b) => a.date.localeCompare(b.date));
+  const result = [...candles];
+  let divIndex = sortedDividends.length - 1;
+  let currentFactor = 1.0;
+  
+  for (let i = result.length - 1; i >= 0; i--) {
+    let candle = { ...result[i] };
+    
+    while (divIndex >= 0 && candle.date < sortedDividends[divIndex].date) {
+      const div = sortedDividends[divIndex];
+      if (div.beforePrice > 0) {
+        currentFactor *= (div.afterPrice / div.beforePrice);
+      }
+      divIndex--;
+    }
+    
+    if (currentFactor !== 1.0) {
+      candle.open = Number((candle.open * currentFactor).toFixed(2));
+      candle.high = Number((candle.high * currentFactor).toFixed(2));
+      candle.low = Number((candle.low * currentFactor).toFixed(2));
+      candle.close = Number((candle.close * currentFactor).toFixed(2));
+      candle.volume = Math.round(candle.volume / currentFactor);
+    }
+    
+    result[i] = candle;
+  }
+  
+  return result;
+}
+
+export interface StockCandle {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 export const fetchHistoricalCandles = async (
   symbol: string,
   apiKey: string,
@@ -160,6 +208,34 @@ export interface ComprehensiveFinancials {
   roe: FinancialStatementData[];
   ocf: FinancialStatementData[]; 
 }
+
+export const fetchDividends = async (symbol: string, rangeDays: number = 3600): Promise<DividendData[]> => {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - rangeDays);
+  const startStr = startDate.toISOString().split('T')[0];
+
+  try {
+    const response = await axios.get(FINMIND_BASE_URL, {
+      params: {
+        dataset: 'TaiwanStockDividendResult',
+        data_id: symbol,
+        start_date: startStr
+      }
+    });
+
+    const rawData = response.data?.data;
+    if (!rawData || !Array.isArray(rawData)) return [];
+
+    return rawData.map((item: any) => ({
+      date: item.date,
+      beforePrice: Number(item.before_price) || 1,
+      afterPrice: Number(item.after_price) || 1
+    }));
+  } catch (error) {
+    console.error('FinMind Dividend Fetch Error:', error);
+    return [];
+  }
+};
 
 export const fetchInstitutionalInvestors = async (symbol: string, days: number = 45): Promise<InstitutionalData[]> => {
   const startDate = new Date();

@@ -7,13 +7,16 @@ import {
   fetchMarginTrading,
   fetchFinancialStatements,
   fetchQuote,
+  fetchDividends,
+  adjustCandles,
 } from '../api';
 import type { 
   StockTicker, 
   StockCandle,
   InstitutionalData,
   MarginData,
-  ComprehensiveFinancials
+  ComprehensiveFinancials,
+  DividendData
 } from '../api';
 import { KLineChart } from '../components/KLineChart';
 import { MarginChart } from '../components/MarginChart';
@@ -24,7 +27,8 @@ import { ThemeToggle } from '../components/ThemeToggle';
 export const StockDetail: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const [ticker, setTicker] = useState<StockTicker | null>(null);
-  const [candles, setCandles] = useState<StockCandle[]>([]);
+  const [rawCandles, setRawCandles] = useState<StockCandle[]>([]);
+  const [dividends, setDividends] = useState<DividendData[]>([]);
   const [institutional, setInstitutional] = useState<InstitutionalData[]>([]);
   const [margin, setMargin] = useState<MarginData[]>([]);
   const [financials, setFinancials] = useState<ComprehensiveFinancials>({
@@ -39,6 +43,11 @@ export const StockDetail: React.FC = () => {
     macd: false,
     kd: false,
   });
+  const [isAdjusted, setIsAdjusted] = useState(false);
+
+  const displayCandles = useMemo(() => {
+    return isAdjusted ? adjustCandles(rawCandles, dividends) : rawCandles;
+  }, [isAdjusted, rawCandles, dividends]);
 
   const [isDarkMode, setIsDarkMode] = useState(() => document.documentElement.classList.contains('dark'));
 
@@ -64,14 +73,14 @@ export const StockDetail: React.FC = () => {
 
   // Calculate signals
   const markers = useMemo(() => {
-    return calculateSignals(candles, institutional, ticker, financials);
-  }, [candles, institutional, ticker, financials]);
+    return calculateSignals(displayCandles, institutional, ticker, financials);
+  }, [displayCandles, institutional, ticker, financials]);
 
   useEffect(() => {
-    if (candles.length > 0) {
-      oldestDateRef.current = candles[0].date;
+    if (rawCandles.length > 0) {
+      oldestDateRef.current = rawCandles[0].date;
     }
-  }, [candles]);
+  }, [rawCandles]);
 
   const apiKey = localStorage.getItem('fugle_api_key') || '';
 
@@ -83,7 +92,7 @@ export const StockDetail: React.FC = () => {
     try {
       const newCandles = await fetchHistoricalCandles(symbol, apiKey, timeframe, 360, newTo);
       if (newCandles.length > 0) {
-        setCandles(current => {
+        setRawCandles(current => {
           const combined = [...newCandles, ...current];
           const unique = Array.from(new Map(combined.map(item => [item.date, item])).values());
           return unique.sort((a, b) => a.date.localeCompare(b.date));
@@ -106,7 +115,7 @@ export const StockDetail: React.FC = () => {
         const d = quoteData.lastUpdated ? new Date(quoteData.lastUpdated) : new Date();
         const quoteDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-        setCandles(prevCandles => {
+        setRawCandles(prevCandles => {
           if (prevCandles.length === 0) return prevCandles;
           
           const newCandles = [...prevCandles];
@@ -157,13 +166,14 @@ export const StockDetail: React.FC = () => {
       if (!symbol || !apiKey) return;
       setLoading(true);
       try {
-        const [tickerData, candlesData, instData, marginData, finData, quoteData] = await Promise.all([
+        const [tickerData, candlesData, instData, marginData, finData, quoteData, divs] = await Promise.all([
           fetchTicker(symbol, apiKey),
           fetchHistoricalCandles(symbol, apiKey, timeframe, 360),
           fetchInstitutionalInvestors(symbol, 360),
           fetchMarginTrading(symbol, 360),
           fetchFinancialStatements(symbol),
-          fetchQuote(symbol, apiKey).catch(() => null)
+          fetchQuote(symbol, apiKey).catch(() => null),
+          fetchDividends(symbol, 3600)
         ]);
 
         let finalCandles = [...candlesData];
@@ -194,7 +204,8 @@ export const StockDetail: React.FC = () => {
         }
 
         setTicker(tickerData);
-        setCandles(finalCandles);
+        setRawCandles(finalCandles);
+        setDividends(divs);
         setInstitutional(instData);
         setMargin(marginData);
         setFinancials(finData as ComprehensiveFinancials);
@@ -208,7 +219,7 @@ export const StockDetail: React.FC = () => {
   }, [symbol, apiKey, timeframe]);
 
   if (!apiKey) return <div className="p-8">請先回首頁設定 API Key</div>;
-  if (loading && !ticker && candles.length === 0) return <div className="p-8 flex justify-center"><div className="animate-spin text-blue-600 h-8 w-8 border-4 border-t-transparent rounded-full"></div></div>;
+  if (loading && !ticker && rawCandles.length === 0) return <div className="p-8 flex justify-center"><div className="animate-spin text-blue-600 h-8 w-8 border-4 border-t-transparent rounded-full"></div></div>;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 pb-20 transition-colors duration-200">
@@ -248,6 +259,16 @@ export const StockDetail: React.FC = () => {
             ))}
           </div>
           <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm cursor-pointer dark:text-gray-300 font-medium">
+              <input 
+                type="checkbox" 
+                checked={isAdjusted} 
+                onChange={e => setIsAdjusted(e.target.checked)}
+                className="rounded text-purple-600"
+              />
+              還原K線
+            </label>
+            <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-2"></div>
             {['ma', 'bollinger', 'macd'].map((key) => (
               <label key={key} className="flex items-center gap-2 text-sm cursor-pointer capitalize dark:text-gray-300">
                 <input 
@@ -263,7 +284,7 @@ export const StockDetail: React.FC = () => {
         </div>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 h-[500px] mb-8">
            <KLineChart 
-             data={candles} 
+             data={displayCandles} 
              indicators={indicators} 
              markers={markers} 
              onLoadMore={loadMoreData} 
