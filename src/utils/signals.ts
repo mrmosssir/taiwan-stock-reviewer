@@ -124,6 +124,7 @@ export const calculateSignals = (
   let startPrice = 0;
   let highestPrice = 0;
   let lastAddIndex = 0;
+  let addCount = 0;
 
   // 3. Iterate and Check Conditions
   for (let i = 60; i < candles.length; i++) {
@@ -235,17 +236,33 @@ export const calculateSignals = (
         currentTrend = null;
         trendDuration = 0;
         lastAddIndex = 0;
+        addCount = 0;
         continue;
       }
 
       // ----------------------------------------------------
-      // 2. 加碼邏輯 (Add Signals) - 雙軌制加碼
+      // 2. 加碼邏輯 (Add Signals) - 雙軌制加碼與優化
       // ----------------------------------------------------
-      if (i - lastAddIndex >= 5 && trendDuration >= 5) {
-        const bullishArray = m5 > m10 && m10 > m20;
-        const touchMA = (low <= m10 * 1.015 && close >= m20 * 0.99);
-        const kdCross = k > d && kLine[i-1]! <= dLine[i-1]!;
-        const macdStrengthening = mh > prevMh;
+      if (i - lastAddIndex >= 5 && trendDuration >= 5 && addCount < 2) {
+        // 中期多頭排列為基礎底線
+        const midTermBullish = m10 > m20;
+        // 嚴格多頭排列 (指標突破時才需要)
+        const strictBullishArray = m5 > m10 && m10 > m20;
+
+        // 回測有撐條件 (Touch MA)
+        const isTouchingMA = (low <= m10 * 1.015 && close >= m20 * 0.99);
+        // K線防護：紅K 或 留下影線的洗盤K，避免接到長黑貫殺
+        const isRedCandle = close >= openPrice;
+        const hasLowerShadow = high > low && ((close - low) / (high - low) > 0.5);
+        const validTouchMA = isTouchingMA && (isRedCandle || hasLowerShadow);
+
+        // 指標轉強條件 (Indicator Synergy)
+        // 限制 KD 在中低位階黃金交叉 (K < 75)
+        const kdCross = k > d && kLine[i-1]! <= dLine[i-1]! && k < 75;
+        // 限制 MACD 柱狀體必須大於 0 (已翻紅)
+        const macdStrengthening = mh > prevMh && mh > 0;
+        const validIndicator = strictBullishArray && kdCross && macdStrengthening;
+
         const dailyGain = prevClose > 0 ? (close - prevClose) / prevClose : 0;
         
         let instBuySupport = false;
@@ -261,7 +278,8 @@ export const calculateSignals = (
           safeBias = bias20 < 0.15;
         }
 
-        if (bullishArray && (touchMA || (kdCross && macdStrengthening)) && instBuySupport && safeBias) {
+        // 觸發條件：中期多頭趨勢下，(有效回測有撐 OR 指標再度轉強) 且有買盤支撐且乖離安全
+        if (midTermBullish && (validTouchMA || validIndicator) && instBuySupport && safeBias) {
           markers.push({
             time: date as Time,
             position: 'belowBar',
@@ -270,6 +288,7 @@ export const calculateSignals = (
             text: '加碼',
           });
           lastAddIndex = i;
+          addCount++;
         }
       }
     } else {
@@ -334,6 +353,7 @@ export const calculateSignals = (
         startPrice = close;
         highestPrice = high;
         lastAddIndex = i;
+        addCount = 0;
       }
     }
   }
