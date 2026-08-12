@@ -1,6 +1,9 @@
 import axios from 'axios';
 
 const FUGLE_BASE_URL = 'https://api.fugle.tw/marketdata/v1.0';
+const CLOUD_API_URL = 'https://cloud-stock-chooser.mrmosssir.workers.dev/api/stock-history';
+const GAS_PROXY_URL = 'https://script.google.com/macros/s/AKfycbwH-wDx586Xv6ArokD1nMMuCvYoqOGsYs25PuiioEv-kC7HSOxAatxN_uusZOjJOZyDag/exec';
+const CLOUD_PROXY_QUOTE_URL = 'https://cloud-stock-chooser.mrmosssir.workers.dev/api/get-realtime-quotes';
 
 export interface StockTicker {
   symbol: string;
@@ -95,41 +98,51 @@ export const fetchHistoricalCandles = async (
   const to = end.toISOString().split('T')[0];
 
   try {
-    const response = await axios.get(`${FUGLE_BASE_URL}/stock/historical/candles/${symbol}`, {
-      headers: { 'X-API-KEY': apiKey },
-      params: {
-        from,
-        to,
-        timeframe,
-        fields: 'open,high,low,close,volume'
-      }
-    });
-    
+    const response = await axios.get(`${CLOUD_API_URL}?id=${symbol}`);
     const rawData = response.data?.data;
     if (!Array.isArray(rawData) || rawData.length === 0) {
       return [];
     }
 
-    const data = rawData.map((item: any) => ({
-      date: item.date,
-      open: item.open,
-      high: item.high,
-      low: item.low,
-      close: item.close,
-      volume: item.volume
-    }));
+    const data = rawData
+      .filter((item: any) => item.date >= from && item.date <= to)
+      .map((item: any) => ({
+        date: item.date,
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+        volume: item.volume
+      }));
 
-    return data.reverse();
+    return data; // Data from R2 is already sorted chronologically
   } catch (error: any) {
-    console.error(`Error fetching candles from ${from} to ${to}:`, error.response?.data || error.message);
+    console.error(`Error fetching candles from ${from} to ${to}:`, error);
     return [];
   }
 };
 
 export const fetchTicker = async (symbol: string, apiKey: string): Promise<StockTicker> => {
-  const response = await axios.get(`${FUGLE_BASE_URL}/stock/intraday/ticker/${symbol}`, {
-    headers: { 'X-API-KEY': apiKey },
-  });
+  // 透過 Cloudflare Worker 代理打證交所 API 取得個股名稱與市場別
+  let name = '';
+  let exchange = '';
+  let market = '';
+  
+  try {
+    const fetchUrl = `${CLOUD_PROXY_QUOTE_URL}?symbol=${symbol}`;
+    const response = await fetch(fetchUrl);
+    const result = await response.json();
+    if (result.success && result.data && result.data.length > 0) {
+      const data = result.data[0];
+      name = data.name;
+      exchange = data.exchange;
+      market = data.market;
+    }
+  } catch (e) {
+    console.error('Error fetching ticker info from MIS:', e);
+  }
+
+  // FinMind API to get issuedShares
   let issuedShares = 0;
   try {
     const fmRes = await axios.get('https://api.finmindtrade.com/api/v4/data', {
@@ -144,31 +157,39 @@ export const fetchTicker = async (symbol: string, apiKey: string): Promise<Stock
   } catch (e) {
     console.error('Error fetching issued_shares from FinMind:', e);
   }
+  
   return {
-    symbol: response.data.symbol,
-    name: response.data.name,
-    type: response.data.type,
-    exchange: response.data.exchange,
-    market: response.data.market,
+    symbol,
+    name,
+    type: 'EQUITY', // Default to equity
+    exchange,
+    market,
     issuedShares,
   };
 };
 
 export const fetchQuote = async (symbol: string, apiKey: string): Promise<StockQuote> => {
-  const response = await axios.get(`${FUGLE_BASE_URL}/stock/intraday/quote/${symbol}`, {
-    headers: { 'X-API-KEY': apiKey },
-  });
-  const data = response.data;
+  // 透過 Cloudflare Worker 代理打證交所 API (由後端負責清洗資料與格式化)
+  const fetchUrl = `${CLOUD_PROXY_QUOTE_URL}?symbol=${symbol}`;
+  const response = await fetch(fetchUrl);
+  const result = await response.json();
+
+  if (!result.success || !result.data || result.data.length === 0) {
+    throw new Error('No quote data found from MIS API');
+  }
+
+  const data = result.data[0];
+
   return {
     symbol: data.symbol,
     lastPrice: data.lastPrice,
     change: data.change,
     changePercent: data.changePercent,
-    open: data.openPrice,
-    high: data.highPrice,
-    low: data.lowPrice,
+    open: data.open,
+    high: data.high,
+    low: data.low,
     volume: data.volume,
-    lastUpdated: data.updatedAt,
+    lastUpdated: data.lastUpdated,
   };
 };
 
@@ -243,47 +264,23 @@ export const fetchInstitutionalInvestors = async (symbol: string, days: number =
   const startStr = startDate.toISOString().split('T')[0];
 
   try {
-    const response = await axios.get(FINMIND_BASE_URL, {
-      params: {
-        dataset: 'TaiwanStockInstitutionalInvestorsBuySell',
-        data_id: symbol,
-        start_date: startStr
-      }
-    });
+    const response = await axios.get(`${CLOUD_API_URL}?id=${symbol}`);
+    const rawData = response.data?.data;
+    if (!Array.isArray(rawData) || rawData.length === 0) return [];
 
-    const rawData = response.data.data;
-    if (!rawData || !Array.isArray(rawData)) return [];
+    const data = rawData
+      .filter((item: any) => item.date >= startStr)
+      .map((item: any) => ({
+        date: item.date,
+        net: (item.netForeign || 0) + (item.netTrust || 0) + (item.netDealer || 0),
+        netForeign: item.netForeign || 0,
+        netTrust: item.netTrust || 0,
+        netDealer: item.netDealer || 0,
+      }));
 
-    const grouped = rawData.reduce((acc: any, item: any) => {
-      const net = (Number(item.buy) || 0) - (Number(item.sell) || 0);
-      const name = item.name;
-
-      if (!acc[item.date]) {
-        acc[item.date] = { net: 0, netForeign: 0, netTrust: 0, netDealer: 0 };
-      }
-      
-      acc[item.date].net += net;
-
-      if (name === 'Foreign_Investor' || name === 'Foreign_Dealer_Self') {
-        acc[item.date].netForeign += net;
-      } else if (name === 'Investment_Trust') {
-        acc[item.date].netTrust += net;
-      } else if (name && (name.includes('Dealer') || name.includes('Self'))) {
-        acc[item.date].netDealer += net;
-      }
-
-      return acc;
-    }, {});
-
-    return Object.keys(grouped).map(date => ({
-      date,
-      net: grouped[date].net,
-      netForeign: grouped[date].netForeign,
-      netTrust: grouped[date].netTrust,
-      netDealer: grouped[date].netDealer,
-    })).sort((a, b) => a.date.localeCompare(b.date));
+    return data;
   } catch (error) {
-    console.error('FinMind Institutional Fetch Error:', error);
+    console.error('Cloud API Institutional Fetch Error:', error);
     return [];
   }
 };

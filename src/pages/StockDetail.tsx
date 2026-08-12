@@ -21,7 +21,7 @@ import type {
 import { KLineChart } from '../components/KLineChart';
 import { MarginChart } from '../components/MarginChart';
 import { ArrowLeft, Users, CreditCard, PieChart, TrendingUp, BarChart3, Activity, Wallet } from 'lucide-react';
-import { calculateSignals } from '../utils/signals';
+import { calculateSignals, SIGNAL_STRATEGIES } from '../utils/signals';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 export const StockDetail: React.FC = () => {
@@ -44,6 +44,7 @@ export const StockDetail: React.FC = () => {
     kd: false,
   });
   const [isAdjusted, setIsAdjusted] = useState(false);
+  const [activeStrategy, setActiveStrategy] = useState(SIGNAL_STRATEGIES[0].id);
 
   const displayCandles = useMemo(() => {
     return isAdjusted ? adjustCandles(rawCandles, dividends) : rawCandles;
@@ -73,8 +74,8 @@ export const StockDetail: React.FC = () => {
 
   // Calculate signals
   const markers = useMemo(() => {
-    return calculateSignals(displayCandles, institutional, ticker, financials);
-  }, [displayCandles, institutional, ticker, financials]);
+    return calculateSignals(activeStrategy, displayCandles, institutional, ticker, financials);
+  }, [activeStrategy, displayCandles, institutional, ticker, financials]);
 
   useEffect(() => {
     if (rawCandles.length > 0) {
@@ -259,6 +260,16 @@ export const StockDetail: React.FC = () => {
             ))}
           </div>
           <div className="flex items-center gap-4">
+            <select
+              value={activeStrategy}
+              onChange={(e) => setActiveStrategy(e.target.value)}
+              className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 outline-none cursor-pointer"
+            >
+              {SIGNAL_STRATEGIES.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
             <label className="flex items-center gap-2 text-sm cursor-pointer dark:text-gray-300 font-medium">
               <input 
                 type="checkbox" 

@@ -1,4 +1,4 @@
-import { SMA, MACD, Stochastic, BollingerBands, RSI } from 'technicalindicators';
+import { SMA, MACD, Stochastic, BollingerBands, RSI, ADX } from 'technicalindicators';
 import type { StockCandle, InstitutionalData, StockTicker, ComprehensiveFinancials } from '../api';
 import type { SeriesMarker, Time } from 'lightweight-charts';
 
@@ -55,7 +55,12 @@ const isLargeCapStock = (
   return false;
 };
 
-export const calculateSignals = (
+export const SIGNAL_STRATEGIES = [
+  { id: 'trend_v1', name: '波段趨勢策略 (原版)' },
+  { id: 'strategy_2', name: '強勢突破模型 (三碼實戰)' }
+];
+
+const calculateTrendStrategy = (
   candles: StockCandle[],
   institutional: InstitutionalData[],
   ticker: StockTicker | null = null,
@@ -361,3 +366,201 @@ export const calculateSignals = (
   return markers;
 };
 
+const calculateStrategy2 = (
+  candles: StockCandle[],
+  institutional: InstitutionalData[],
+  ticker: StockTicker | null = null,
+  financials?: ComprehensiveFinancials
+): SeriesMarker<Time>[] => {
+  if (candles.length < 60) return [];
+
+  const closes = candles.map(c => c.close);
+  const highs = candles.map(c => c.high);
+  const lows = candles.map(c => c.low);
+  const volumes = candles.map(c => c.volume);
+  const dates = candles.map(c => c.date);
+
+  // 1. Calculate Technical Indicators
+  const ma5 = padData(closes, SMA.calculate({ period: 5, values: closes }));
+  const ma10 = padData(closes, SMA.calculate({ period: 10, values: closes }));
+  const ma20 = padData(closes, SMA.calculate({ period: 20, values: closes }));
+  const ma5Vol = padData(volumes, SMA.calculate({ period: 5, values: volumes }));
+
+  const bbRaw = BollingerBands.calculate({ period: 20, stdDev: 2, values: closes });
+  const bbUpper = padData(closes, bbRaw.map(b => b.upper));
+
+  const macdRaw = MACD.calculate({ 
+    values: closes, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9, 
+    SimpleMAOscillator: false, SimpleMASignal: false 
+  });
+  const diffMacd = closes.length - macdRaw.length;
+  const macdHist = new Array(diffMacd).fill(null).concat(macdRaw.map(m => m.histogram));
+
+  const adxRaw = ADX.calculate({ high: highs, low: lows, close: closes, period: 14 });
+  const diffAdx = closes.length - adxRaw.length;
+  const adx = new Array(diffAdx).fill(null).concat(adxRaw.map(a => a.adx));
+  const pdi = new Array(diffAdx).fill(null).concat(adxRaw.map(a => a.pdi));
+  const mdi = new Array(diffAdx).fill(null).concat(adxRaw.map(a => a.mdi));
+
+  const markers: SeriesMarker<Time>[] = [];
+  
+  // State variables
+  let isInWatchlist = false;
+  let watchCountdown = 0;
+  let anchorLow = 0;
+  let breakoutVol = 0;
+  let positionState = 0; // 0, 1, 2, 3
+  let entryPrice1 = 0;
+  let daysBelow10MA = 0;
+
+  for (let i = 60; i < candles.length; i++) {
+    const date = dates[i];
+    const close = closes[i];
+    const low = lows[i];
+    const vol = volumes[i];
+
+    const m5 = ma5[i] ?? 0;
+    const m10 = ma10[i] ?? 0;
+    const m20 = ma20[i] ?? 0;
+    const isBullishMA = m5 > m10 && m10 > m20;
+    const m5v = ma5Vol[i] ?? 0;
+    const bbu = bbUpper[i] ?? 0;
+    const currentPdi = pdi[i] ?? 0;
+    const currentMdi = mdi[i] ?? 0;
+    const currentAdx = adx[i] ?? 0;
+    const prevAdx = adx[i-1] ?? 0;
+
+    // --- Module 3: Structural Defense & Exit ---
+    if (positionState > 0) {
+      let shouldExit = false;
+
+      // Update Time Delay Filter
+      if (close < m10) {
+        daysBelow10MA += 1;
+      } else {
+        daysBelow10MA = 0;
+      }
+
+      // Defense Mechanism A (Only first tier)
+      if (positionState === 1 && close < anchorLow) {
+        shouldExit = true;
+      }
+      // Defense Mechanism B (Second tier or fully loaded)
+      else if (positionState >= 2 && daysBelow10MA >= 4) {
+        shouldExit = true;
+      }
+
+      if (shouldExit) {
+        markers.push({
+          time: date as Time,
+          position: 'aboveBar',
+          color: '#ff9800',
+          shape: 'arrowDown',
+          text: '平倉',
+        });
+        positionState = 0;
+        isInWatchlist = false;
+        continue;
+      }
+    }
+
+    // --- Module 1: Radar Monitoring (Watchlist) ---
+    if (positionState === 0 && !isInWatchlist) {
+      const hasRecentMacdPositive = macdHist.slice(i-5, i+1).some(h => h !== null && h > 0);
+      const isBreakout = close > bbu && vol > m5v * 1.5 && currentPdi > currentMdi && hasRecentMacdPositive;
+
+      if (isBreakout) {
+        isInWatchlist = true;
+        anchorLow = low;
+        breakoutVol = vol;
+        watchCountdown = 8;
+        markers.push({
+          time: date as Time,
+          position: 'aboveBar',
+          color: '#9C27B0',
+          shape: 'circle',
+          text: '監控',
+        });
+        continue; // Wait for the next day to potentially enter
+      }
+    }
+
+    // Update Watchlist Countdown
+    if (isInWatchlist && positionState === 0) {
+      if (watchCountdown > 0) {
+        watchCountdown -= 1;
+      } else {
+        isInWatchlist = false; // Expired
+      }
+    }
+
+    // --- Module 2: Capital Entry (State Transitions) ---
+    if (isInWatchlist) {
+      if (positionState === 0 && watchCountdown > 0) {
+        // State 0 -> 1: First tier (Pullback to near 5MA)
+        const isNear5MA = Math.abs(close - m5) / m5 <= 0.02;
+
+        if (isNear5MA && isBullishMA) {
+          markers.push({
+            time: date as Time,
+            position: 'belowBar',
+            color: '#e91e63',
+            shape: 'arrowUp',
+            text: '建倉(1)',
+          });
+          positionState = 1;
+          entryPrice1 = close;
+        }
+      } else if (positionState === 1) {
+        // State 1 -> 2: Second tier (Trend confirmation)
+        const isProfitable = close > entryPrice1;
+        const isAdxStrong = currentAdx > 20 && currentAdx > prevAdx;
+
+        if (isProfitable && isAdxStrong && isBullishMA) {
+          markers.push({
+            time: date as Time,
+            position: 'belowBar',
+            color: '#2196F3',
+            shape: 'arrowUp',
+            text: '加碼(2)',
+          });
+          positionState = 2;
+        }
+      } else if (positionState === 2) {
+        // State 2 -> 3: Third tier (Structure breakout)
+        const recent10Highs = highs.slice(i-10, i);
+        const max10High = recent10Highs.length > 0 ? Math.max(...recent10Highs) : 0;
+        
+        if (close > max10High && isBullishMA) {
+          markers.push({
+            time: date as Time,
+            position: 'belowBar',
+            color: '#4CAF50',
+            shape: 'arrowUp',
+            text: '滿倉(3)',
+          });
+          positionState = 3;
+        }
+      }
+    }
+  }
+
+  return markers;
+};
+
+export const calculateSignals = (
+  strategyId: string,
+  candles: StockCandle[],
+  institutional: InstitutionalData[],
+  ticker: StockTicker | null = null,
+  financials?: ComprehensiveFinancials
+): SeriesMarker<Time>[] => {
+  switch (strategyId) {
+    case 'trend_v1':
+      return calculateTrendStrategy(candles, institutional, ticker, financials);
+    case 'strategy_2':
+      return calculateStrategy2(candles, institutional, ticker, financials);
+    default:
+      return calculateTrendStrategy(candles, institutional, ticker, financials);
+  }
+};
