@@ -302,63 +302,79 @@ const calculateTrendStrategy = (
       // ----------------------------------------------------
       // 專注於做多，不產生做空訊號。
       
-      let shouldEnter = false;
+      if (m20v >= 200000 && bias20 >= -0.05) {
+        let score = 0;
+        let baseVol = false;
+        let baseBullish = false;
+        let baseNearMA = false;
+        let baseInst = false;
+        
+        let trustRatioDaily = 0;
+        let foreignTrustRatioDaily = 0;
+        let todayMajorNet = 0;
 
-      if (isLargeCap) {
-        // 【大型權值股專屬軌道】
-        // (a) 溫和成交量放大：不需 1.58 倍，只需滿足推動量 1.10 倍以上
-        const hasVolumeBreakout = m20v > 0 ? (m5v / m20v > 1.10 || vol / m20v > 1.15) : false;
-        // (b) 趨勢與技術共振：站在 MA20 之上，MACD 為正或轉強，RSI 位於 48~82 穩健區間
+        if (ticker && ticker.issuedShares && ticker.issuedShares > 0) {
+          trustRatioDaily = (instToday.netTrust / ticker.issuedShares) * 100;
+          todayMajorNet = instToday.netForeign + instToday.netTrust + instToday.netDealer;
+          foreignTrustRatioDaily = (todayMajorNet / ticker.issuedShares) * 100;
+        } else {
+          todayMajorNet = instToday.netForeign + instToday.netTrust + instToday.netDealer;
+        }
+        
         const macdSynergy = mh > 0 || (mh > prevMh && mh > -0.02);
-        const kdSynergy = k > d && k > 20;
-        const isBullishContext = close > m20 && rsiVal > 48 && rsiVal < 82 && macdSynergy && kdSynergy;
-        // (c) 觸發條件：均線多頭排列或剛穿越 MA20
-        const isCrossover = prevClose <= m20 * 1.01 && close > m20;
-        const isMovingUp = m5 > m10 && close > m10;
-        // (d) 重籌碼依賴：外資或三大法人連續買超，展現機構建倉意圖
-        const hasInstitutionalSupport = major3DaysNet > 0 || (instToday.net > 0 && instPrev1.net > 0);
-        // (e) 乖離控制
-        const isBiasSafe = bias20 < 0.12;
 
-        shouldEnter = hasVolumeBreakout && isBullishContext && (isCrossover || isMovingUp) && hasInstitutionalSupport && isBiasSafe;
-      } else {
-        // 【中小型飆股專屬軌道】
-        // (a) 巨量突破：5日均量 > 20日均量 1.58 倍以上，或當日爆量 > 2.0 倍
-        const hasVolumeBreakout = m20v > 0 ? ((m5v / m20v > 1.58) || (vol / m20v > 2.0)) : false;
-        // (b) 技術面多頭共振
-        const macdSynergy = mh > 0 || (mh > prevMh);
-        const kdSynergy = k > d && k > 20;
-        const isBullishContext = close > m20 && rsiVal > 48 && rsiVal < 86 && macdSynergy && kdSynergy;
-        // (c) 觸發條件 (三選一)
-        const isCrossover = prevClose <= m20 * 1.015 && close > m20;
-        const prev20High = Math.max(...highs.slice(i-20, i));
-        const isBreakHigh = close > prev20High; 
-        const isBbOpening = bbW > prevBbW * 1.05 && close >= bbU * 0.99;
-        // (d) 籌碼與主力彈性判定
-        const dailyGain = prevClose > 0 ? (close - prevClose) / prevClose : 0;
-        const isStrongPriceAction = dailyGain > 0.04 || (isBreakHigh && vol / m20v > 2.5);
-        const hasInstitutionalOrMajorSupport = major3DaysNet > 0 || instToday.net > 0 || isStrongPriceAction;
-        // (e) K線型態與乖離過濾
-        const isRedCandle = close >= openPrice || dailyGain > 0.02;
-        const isBiasSafe = bias20 < 0.22;
+        if (isLargeCap) {
+          baseVol = m20v > 0 ? (m5v / m20v > 1.10 || vol / m20v > 1.15) : false;
+          baseBullish = rsiVal > 40 && rsiVal < 82 && macdSynergy && k > d;
+          baseNearMA = close > m20 && bias20 < 0.05;
+          baseInst = (ticker && ticker.issuedShares && ticker.issuedShares > 0) 
+            ? (trustRatioDaily > 0.015 || foreignTrustRatioDaily > 0.03) 
+            : (todayMajorNet > 0);
+        } else {
+          baseVol = m20v > 0 ? ((m5v / m20v > 1.58) || (vol / m20v > 2.0)) : false;
+          baseBullish = rsiVal > 40 && rsiVal < 86 && macdSynergy && k > d;
+          const isBbOpening = bbW > prevBbW * 1.05 && close >= bbU * 0.99;
+          baseNearMA = (close > m20 && bias20 < 0.08) || isBbOpening;
+          baseInst = (ticker && ticker.issuedShares && ticker.issuedShares > 0)
+            ? (trustRatioDaily > 0.03 || foreignTrustRatioDaily > 0.05)
+            : (todayMajorNet > 0);
+        }
 
-        shouldEnter = hasVolumeBreakout && isBullishContext && (isCrossover || isBreakHigh || isBbOpening) && hasInstitutionalOrMajorSupport && isRedCandle && isBiasSafe;
-      }
+        if (baseVol) score += 15;
+        if (baseBullish) score += 15;
+        if (baseNearMA) score += 15;
+        if (baseInst) score += 15;
 
-      if (shouldEnter) {
-        markers.push({
-          time: date as Time,
-          position: 'belowBar',
-          color: '#e91e63',
-          shape: 'arrowUp',
-          text: '啟動',
-        });
-        currentTrend = 'long';
-        trendDuration = 0;
-        startPrice = close;
-        highestPrice = high;
-        lastAddIndex = i;
-        addCount = 0;
+        // 3. 動能外卡加分 (最高 40分)
+        const volRatio = m20v > 0 ? (vol / m20v) : 1;
+        score += Math.min(15, Math.max(0, (volRatio - 1) * 10)); // 爆量加分
+        
+        if (trustRatioDaily > 0) score += Math.min(10, trustRatioDaily * 100);
+        if (instToday.netTrust > 0 && instToday.netForeign > 0 && ticker && ticker.issuedShares && ticker.issuedShares > 0) {
+            score += 5; // 內外資聯手
+        }
+
+        if (rsiVal >= 55 && rsiVal <= 80) {
+            score += Math.min(10, (rsiVal - 55) * (10 / 25)); // 動能加分
+        }
+
+        score = Math.min(100, score); // 鎖定最高 100 分
+
+        if (score >= 60) {
+          markers.push({
+            time: date as Time,
+            position: 'belowBar',
+            color: '#e91e63',
+            shape: 'arrowUp',
+            text: `啟動(${Math.round(score)})`,
+          });
+          currentTrend = 'long';
+          trendDuration = 0;
+          startPrice = close;
+          highestPrice = high;
+          lastAddIndex = i;
+          addCount = 0;
+        }
       }
     }
   }
@@ -368,9 +384,9 @@ const calculateTrendStrategy = (
 
 const calculateStrategy2 = (
   candles: StockCandle[],
-  institutional: InstitutionalData[],
-  ticker: StockTicker | null = null,
-  financials?: ComprehensiveFinancials
+  _institutional: InstitutionalData[],
+  _ticker: StockTicker | null = null,
+  _financials?: ComprehensiveFinancials
 ): SeriesMarker<Time>[] => {
   if (candles.length < 60) return [];
 
@@ -408,7 +424,6 @@ const calculateStrategy2 = (
   let isInWatchlist = false;
   let watchCountdown = 0;
   let anchorLow = 0;
-  let breakoutVol = 0;
   let positionState = 0; // 0, 1, 2, 3
   let entryPrice1 = 0;
   let daysBelow10MA = 0;
@@ -472,7 +487,6 @@ const calculateStrategy2 = (
       if (isBreakout) {
         isInWatchlist = true;
         anchorLow = low;
-        breakoutVol = vol;
         watchCountdown = 8;
         markers.push({
           time: date as Time,

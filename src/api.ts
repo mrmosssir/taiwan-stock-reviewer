@@ -1,8 +1,6 @@
 import axios from 'axios';
 
-const FUGLE_BASE_URL = 'https://api.fugle.tw/marketdata/v1.0';
 const CLOUD_API_URL = 'https://cloud-stock-chooser.mrmosssir.workers.dev/api/stock-history';
-const GAS_PROXY_URL = 'https://script.google.com/macros/s/AKfycbwH-wDx586Xv6ArokD1nMMuCvYoqOGsYs25PuiioEv-kC7HSOxAatxN_uusZOjJOZyDag/exec';
 const CLOUD_PROXY_QUOTE_URL = 'https://cloud-stock-chooser.mrmosssir.workers.dev/api/get-realtime-quotes';
 
 export interface StockTicker {
@@ -85,8 +83,8 @@ export interface StockCandle {
 
 export const fetchHistoricalCandles = async (
   symbol: string,
-  apiKey: string,
-  timeframe: string = 'D',
+  _apiKey: string,
+  _timeframe: string = 'D',
   rangeDays: number = 360,
   endDateStr?: string
 ): Promise<StockCandle[]> => {
@@ -122,53 +120,36 @@ export const fetchHistoricalCandles = async (
   }
 };
 
-export const fetchTicker = async (symbol: string, apiKey: string): Promise<StockTicker> => {
-  // 透過 Cloudflare Worker 代理打證交所 API 取得個股名稱與市場別
-  let name = '';
-  let exchange = '';
-  let market = '';
-  
+export const fetchTicker = async (symbol: string, _apiKey: string): Promise<StockTicker> => {
   try {
-    const fetchUrl = `${CLOUD_PROXY_QUOTE_URL}?symbol=${symbol}`;
+    const fetchUrl = `https://cloud-stock-chooser.mrmosssir.workers.dev/api/stock-info?id=${symbol}`;
     const response = await fetch(fetchUrl);
-    const result = await response.json();
-    if (result.success && result.data && result.data.length > 0) {
-      const data = result.data[0];
-      name = data.name;
-      exchange = data.exchange;
-      market = data.market;
+    if (!response.ok) {
+      throw new Error(`Failed to fetch stock info, status: ${response.status}`);
     }
+    const data = await response.json();
+    return {
+      symbol: data.symbol,
+      name: data.name,
+      type: data.type || 'EQUITY',
+      exchange: data.exchange || '',
+      market: '',
+      issuedShares: data.issuedShares ? Number(data.issuedShares) : 0,
+    };
   } catch (e) {
-    console.error('Error fetching ticker info from MIS:', e);
+    console.error('Error fetching ticker info from backend:', e);
+    return {
+      symbol,
+      name: '',
+      type: 'EQUITY',
+      exchange: '',
+      market: '',
+      issuedShares: 0,
+    };
   }
-
-  // FinMind API to get issuedShares
-  let issuedShares = 0;
-  try {
-    const fmRes = await axios.get('https://api.finmindtrade.com/api/v4/data', {
-      params: { dataset: 'TaiwanStockInfo', data_id: symbol }
-    });
-    if (Array.isArray(fmRes.data?.data)) {
-      const item = fmRes.data.data.find((s: any) => s.stock_id === symbol);
-      if (item && item.issued_shares) {
-        issuedShares = Number(item.issued_shares);
-      }
-    }
-  } catch (e) {
-    console.error('Error fetching issued_shares from FinMind:', e);
-  }
-  
-  return {
-    symbol,
-    name,
-    type: 'EQUITY', // Default to equity
-    exchange,
-    market,
-    issuedShares,
-  };
 };
 
-export const fetchQuote = async (symbol: string, apiKey: string): Promise<StockQuote> => {
+export const fetchQuote = async (symbol: string, _apiKey: string): Promise<StockQuote> => {
   // 透過 Cloudflare Worker 代理打證交所 API (由後端負責清洗資料與格式化)
   const fetchUrl = `${CLOUD_PROXY_QUOTE_URL}?symbol=${symbol}`;
   const response = await fetch(fetchUrl);
