@@ -7,7 +7,7 @@ StockReview 是一個現代化的台股分析 Web 應用程式，旨在提供投
 *   **即時行情追蹤**：
     *   自選股清單管理（Local Storage 儲存）。
     *   即時股價、漲跌幅、成交量監控。
-    *   串接 **Fugle 富果行情 API**。
+    *   **無縫串接 Cloud Stock Chooser (Cloudflare Workers) 後端代理 API**，告別前端 CORS 煩惱。
 
 *   **專業技術分析 (K 線圖)**：
     *   整合 **TradingView Lightweight Charts v5**。
@@ -40,7 +40,7 @@ StockReview 是一個現代化的台股分析 Web 應用程式，旨在提供投
 *   **Icons**: [Lucide React](https://lucide.dev/)
 *   **Routing**: React Router v7
 *   **Data Sources**:
-    *   [Fugle Market Data API](https://developer.fugle.tw/) (行情)
+    *   **Cloud Stock Chooser API** (整合證交所與 R2 歷史快取，提供極速行情與 K 線)
     *   [FinMind API](https://finmind.github.io/) (籌碼/財報)
 
 ## 📦 安裝與執行
@@ -62,16 +62,7 @@ StockReview 是一個現代化的台股分析 Web 應用程式，旨在提供投
     ```
     瀏覽器打開 `http://localhost:5173` 即可使用。
 
-## 🔑 環境設定與 API Key
 
-*   **Fugle API Key**:
-    *   進入應用程式後，在首頁上方輸入您的 Fugle API Key (可至 [Fugle Developer](https://developer.fugle.tw/) 申請)。
-    *   Key 會儲存在瀏覽器的 `localStorage`，不會上傳至任何伺服器。
-
-*   **Proxy 設定 (重要)**:
-    *   專案使用 `vite.config.ts` 設定了 Proxy 來解決 CORS 問題。
-    *   `/v1.0` -> `https://api.fugle.tw/marketdata`
-    *   `/finmind` -> `https://api.finmindtrade.com/api/v4/data`
 
 ## 📂 專案結構
 
