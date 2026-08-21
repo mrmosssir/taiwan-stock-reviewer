@@ -83,7 +83,6 @@ export interface StockCandle {
 
 export const fetchHistoricalCandles = async (
   symbol: string,
-  _apiKey: string,
   _timeframe: string = 'D',
   rangeDays: number = 360,
   endDateStr?: string
@@ -120,7 +119,7 @@ export const fetchHistoricalCandles = async (
   }
 };
 
-export const fetchTicker = async (symbol: string, _apiKey: string): Promise<StockTicker> => {
+export const fetchTicker = async (symbol: string): Promise<StockTicker> => {
   try {
     const fetchUrl = `https://cloud-stock-chooser.mrmosssir.workers.dev/api/stock-info?id=${symbol}`;
     const response = await fetch(fetchUrl);
@@ -149,7 +148,34 @@ export const fetchTicker = async (symbol: string, _apiKey: string): Promise<Stoc
   }
 };
 
-export const fetchQuote = async (symbol: string, _apiKey: string): Promise<StockQuote> => {
+export const fetchTickers = async (symbols: string[]): Promise<Record<string, StockTicker>> => {
+  if (symbols.length === 0) return {};
+  try {
+    const fetchUrl = `https://cloud-stock-chooser.mrmosssir.workers.dev/api/stock-info?ids=${symbols.join(',')}`;
+    const response = await fetch(fetchUrl);
+    if (!response.ok) throw new Error(`Failed to fetch tickers, status: ${response.status}`);
+    const data = await response.json();
+    const result: Record<string, StockTicker> = {};
+    if (Array.isArray(data)) {
+      data.forEach((item: any) => {
+        result[item.symbol] = {
+          symbol: item.symbol,
+          name: item.name,
+          type: item.type || 'EQUITY',
+          exchange: item.exchange || '',
+          market: '',
+          issuedShares: item.issuedShares ? Number(item.issuedShares) : 0,
+        };
+      });
+    }
+    return result;
+  } catch (e) {
+    console.error('Error fetching tickers info from backend:', e);
+    return {};
+  }
+};
+
+export const fetchQuote = async (symbol: string): Promise<StockQuote> => {
   // 透過 Cloudflare Worker 代理打證交所 API (由後端負責清洗資料與格式化)
   const fetchUrl = `${CLOUD_PROXY_QUOTE_URL}?symbol=${symbol}`;
   const response = await fetch(fetchUrl);
@@ -172,6 +198,35 @@ export const fetchQuote = async (symbol: string, _apiKey: string): Promise<Stock
     volume: data.volume,
     lastUpdated: data.lastUpdated,
   };
+};
+
+export const fetchQuotes = async (symbols: string[]): Promise<Record<string, StockQuote>> => {
+  if (symbols.length === 0) return {};
+  try {
+    const fetchUrl = `${CLOUD_PROXY_QUOTE_URL}?symbols=${symbols.join(',')}`;
+    const response = await fetch(fetchUrl);
+    const result = await response.json();
+    if (!result.success || !result.data) return {};
+    
+    const map: Record<string, StockQuote> = {};
+    result.data.forEach((item: any) => {
+      map[item.symbol] = {
+        symbol: item.symbol,
+        lastPrice: item.lastPrice,
+        change: item.change,
+        changePercent: item.changePercent,
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        volume: item.volume,
+        lastUpdated: item.lastUpdated,
+      };
+    });
+    return map;
+  } catch (e) {
+    console.error('Error fetching quotes from backend:', e);
+    return {};
+  }
 };
 
 // --- FinMind API Section ---
@@ -362,5 +417,19 @@ export const fetchFinancialStatements = async (symbol: string): Promise<Comprehe
   } catch (error) {
     console.error('FinMind Financial Fetch Error:', error);
     return { revenue: [], grossMargin: [], operatingMargin: [], netIncome: [], eps: [], debtRatio: [], roe: [], ocf: [] };
+  }
+};
+
+export const fetchLatestPicks = async (): Promise<{ symbol: string; [key: string]: any }[]> => {
+  try {
+    const response = await fetch('https://cloud-stock-chooser.mrmosssir.workers.dev/api/latest-picks');
+    const result = await response.json();
+    if (result.success && Array.isArray(result.data)) {
+      return result.data;
+    }
+    return [];
+  } catch (error) {
+    console.error('Error fetching latest picks:', error);
+    return [];
   }
 };

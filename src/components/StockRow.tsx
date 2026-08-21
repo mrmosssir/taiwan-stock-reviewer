@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Trash2, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import React from 'react';
+import { Trash2, TrendingUp, TrendingDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { fetchQuote, fetchTicker } from '../api';
 import type { StockQuote, StockTicker } from '../api';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -12,36 +11,16 @@ function cn(...inputs: ClassValue[]) {
 
 interface StockRowProps {
   symbol: string;
-  apiKey: string;
-  onRemove: (symbol: string) => void;
+  ticker?: StockTicker;
+  quote?: StockQuote;
+  error?: string;
+  loading?: boolean;
+  onRemove?: (symbol: string) => void;
+  readOnly?: boolean;
 }
 
-export const StockRow: React.FC<StockRowProps> = ({ symbol, apiKey, onRemove }) => {
-  const [ticker, setTicker] = useState<StockTicker | null>(null);
-  const [quote, setQuote] = useState<StockQuote | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const tickerData = await fetchTicker(symbol, apiKey);
-      const quoteData = await fetchQuote(symbol, apiKey);
-      setTicker(tickerData);
-      setQuote(quoteData);
-    } catch (err: any) {
-      setError(err.response?.data?.message || '載入失敗');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, [symbol, apiKey]);
-
-  if (loading && !ticker) {
+export const StockRow: React.FC<StockRowProps> = ({ symbol, ticker, quote, error, loading, onRemove, readOnly }) => {
+  if (loading && !ticker && !quote) {
     return (
       <div className="animate-pulse flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
         <div className="flex gap-4">
@@ -57,9 +36,11 @@ export const StockRow: React.FC<StockRowProps> = ({ symbol, apiKey, onRemove }) 
     return (
       <div className="flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/10 border-b border-red-100 dark:border-red-900/20 text-red-600 dark:text-red-400 text-sm">
         <span>{symbol}: {error}</span>
-        <button onClick={() => onRemove(symbol)} className="p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded">
-          <Trash2 size={16} />
-        </button>
+        {onRemove && !readOnly && (
+          <button onClick={() => onRemove(symbol)} className="p-1 hover:bg-red-100 dark:bg-red-900/20 rounded">
+            <Trash2 size={16} />
+          </button>
+        )}
       </div>
     );
   }
@@ -85,7 +66,7 @@ export const StockRow: React.FC<StockRowProps> = ({ symbol, apiKey, onRemove }) 
             isDown && "text-green-600 dark:text-green-400",
             !isUp && !isDown && "text-gray-900 dark:text-white"
           )}>
-            {quote?.lastPrice.toFixed(2)}
+            {quote?.lastPrice.toFixed(2) ?? '-'}
           </span>
           <div className={cn(
             "flex items-center text-xs font-medium",
@@ -96,31 +77,28 @@ export const StockRow: React.FC<StockRowProps> = ({ symbol, apiKey, onRemove }) 
             {isUp && <TrendingUp size={12} className="mr-1" />}
             {isDown && <TrendingDown size={12} className="mr-1" />}
             <span>
-              {quote && (
+              {quote ? (
                 <>
                   {quote.change > 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.changePercent.toFixed(2)}%)
                 </>
-              )}
+              ) : '-'}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={loadData}
-            className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-all"
-            title="更新"
-          >
-            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-          </button>
-          <button
-            onClick={() => onRemove(symbol)}
-            className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-all"
-            title="刪除"
-          >
-            <Trash2 size={18} />
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            {onRemove && (
+              <button
+                onClick={() => onRemove(symbol)}
+                className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-all"
+                title="刪除"
+              >
+                <Trash2 size={18} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

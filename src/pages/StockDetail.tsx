@@ -20,9 +20,60 @@ import type {
 } from '../api';
 import { KLineChart } from '../components/KLineChart';
 import { MarginChart } from '../components/MarginChart';
-import { ArrowLeft, Users, CreditCard, PieChart, TrendingUp, BarChart3, Activity, Wallet } from 'lucide-react';
+import { ArrowLeft, Users, CreditCard, PieChart, TrendingUp, BarChart3, Activity, Wallet, Star } from 'lucide-react';
 import { calculateSignals, SIGNAL_STRATEGIES } from '../utils/signals';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { useWatchlist } from '../context/WatchlistContext';
+
+const WatchlistDropdown = ({ symbol }: { symbol: string }) => {
+  const { folders, getFoldersContainingStock, addStockToFolder, removeStockFromFolder } = useWatchlist();
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const inFolders = getFoldersContainingStock(symbol);
+  const isStarred = inFolders.length > 0;
+  
+  return (
+    <div className="relative inline-block ml-2">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center"
+        title="加入/移除自選股"
+      >
+        <Star size={20} className={isStarred ? "fill-yellow-400 text-yellow-400" : "text-gray-400 dark:text-gray-500"} />
+      </button>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 z-20 py-1">
+            <div className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700 font-normal">
+              加入至資料夾
+            </div>
+            {folders.map(folder => {
+              const inFolder = inFolders.includes(folder.id);
+              return (
+                <button
+                  key={folder.id}
+                  onClick={() => {
+                    if (inFolder) {
+                      removeStockFromFolder(folder.id, symbol);
+                    } else {
+                      addStockToFolder(folder.id, symbol);
+                    }
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-between font-normal"
+                >
+                  <span className="text-gray-700 dark:text-gray-200 truncate pr-2">{folder.name}</span>
+                  {inFolder && <span className="text-blue-500 shrink-0">✓</span>}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 export const StockDetail: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();
@@ -83,15 +134,13 @@ export const StockDetail: React.FC = () => {
     }
   }, [rawCandles]);
 
-  const apiKey = localStorage.getItem('fugle_api_key') || '';
-
   const loadMoreData = async () => {
-    if (!symbol || !apiKey || loading || !oldestDateRef.current) return;
+    if (!symbol || loading || !oldestDateRef.current) return;
     const oldestDate = new Date(oldestDateRef.current);
     oldestDate.setDate(oldestDate.getDate() - 1);
     const newTo = oldestDate.toISOString().split('T')[0];
     try {
-      const newCandles = await fetchHistoricalCandles(symbol, apiKey, timeframe, 360, newTo);
+      const newCandles = await fetchHistoricalCandles(symbol, timeframe, 360, newTo);
       if (newCandles.length > 0) {
         setRawCandles(current => {
           const combined = [...newCandles, ...current];
@@ -106,11 +155,11 @@ export const StockDetail: React.FC = () => {
 
   // 盤中即時更新 (每 15 秒輪詢一次)
   useEffect(() => {
-    if (!symbol || !apiKey || timeframe !== 'D') return;
+    if (!symbol || timeframe !== 'D') return;
 
     const intervalId = setInterval(async () => {
       try {
-        const quoteData = await fetchQuote(symbol, apiKey);
+        const quoteData = await fetchQuote(symbol);
         if (!quoteData || quoteData.lastPrice <= 0) return;
 
         const d = quoteData.lastUpdated ? new Date(quoteData.lastUpdated) : new Date();
@@ -160,20 +209,20 @@ export const StockDetail: React.FC = () => {
     }, 15000);
 
     return () => clearInterval(intervalId);
-  }, [symbol, apiKey, timeframe]);
+  }, [symbol, timeframe]);
 
   useEffect(() => {
     const loadAllData = async () => {
-      if (!symbol || !apiKey) return;
+      if (!symbol) return;
       setLoading(true);
       try {
         const [tickerData, candlesData, instData, marginData, finData, quoteData, divs] = await Promise.all([
-          fetchTicker(symbol, apiKey),
-          fetchHistoricalCandles(symbol, apiKey, timeframe, 360),
+          fetchTicker(symbol),
+          fetchHistoricalCandles(symbol, timeframe, 360),
           fetchInstitutionalInvestors(symbol, 360),
           fetchMarginTrading(symbol, 360),
           fetchFinancialStatements(symbol),
-          fetchQuote(symbol, apiKey).catch(() => null),
+          fetchQuote(symbol).catch(() => null),
           fetchDividends(symbol, 3600)
         ]);
 
@@ -217,9 +266,8 @@ export const StockDetail: React.FC = () => {
       }
     };
     loadAllData();
-  }, [symbol, apiKey, timeframe]);
+  }, [symbol, timeframe]);
 
-  if (!apiKey) return <div className="p-8">請先回首頁設定 API Key</div>;
   if (loading && !ticker && rawCandles.length === 0) return <div className="p-8 flex justify-center"><div className="animate-spin text-blue-600 h-8 w-8 border-4 border-t-transparent rounded-full"></div></div>;
 
   return (
@@ -236,6 +284,7 @@ export const StockDetail: React.FC = () => {
                 <span className="text-xs font-normal text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
                   {ticker?.market} {ticker?.type}
                 </span>
+                {ticker && <WatchlistDropdown symbol={ticker.symbol} />}
               </h1>
             </div>
           </div>
