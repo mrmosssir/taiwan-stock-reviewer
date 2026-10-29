@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { AddStock } from '../components/AddStock';
 import { StockRow } from '../components/StockRow';
-import { Layout, LineChart, Github, FolderPlus, Edit2, Trash2, Sparkles, RefreshCw } from 'lucide-react';
+import { Layout, LineChart, Github, FolderPlus, Edit2, Trash2, Sparkles, RefreshCw, BarChart3 } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useWatchlist } from '../context/WatchlistContext';
 import { fetchLatestPicks, fetchTickers, fetchQuotes } from '../api';
@@ -104,7 +105,14 @@ export const Home = () => {
             <LineChart size={28} strokeWidth={2.5} />
             <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">StockReview</h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <Link
+              to="/market"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs font-semibold transition-colors border border-blue-200/50 dark:border-blue-800/50"
+            >
+              <BarChart3 size={15} />
+              <span>大盤總覽</span>
+            </Link>
             <ThemeToggle />
             <a
               href="https://github.com"

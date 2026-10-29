@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   createChart, 
   ColorType,
@@ -29,11 +29,29 @@ export const KLineChart: React.FC<KLineChartProps> = ({
   indicators, 
   markers, 
   onLoadMore, 
-  isDarkMode = false 
+  isDarkMode: propDarkMode 
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const isLoadingMoreRef = useRef(false);
+  const [internalDarkMode, setInternalDarkMode] = useState(() => 
+    typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : false
+  );
+
+  useEffect(() => {
+    const updateTheme = () => {
+      setInternalDarkMode(document.documentElement.classList.contains('dark'));
+    };
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('theme-change', updateTheme);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('theme-change', updateTheme);
+    };
+  }, []);
+
+  const isDarkMode = propDarkMode !== undefined ? propDarkMode : internalDarkMode;
 
   // Initial Chart Creation
   useEffect(() => {
@@ -41,19 +59,20 @@ export const KLineChart: React.FC<KLineChartProps> = ({
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: isDarkMode ? '#111827' : 'white' },
-        textColor: isDarkMode ? '#9ca3af' : 'black',
+        background: { type: ColorType.Solid, color: 'transparent' },
+        textColor: isDarkMode ? '#9ca3af' : '#64748b',
       },
       width: chartContainerRef.current.clientWidth,
       height: 460,
       grid: {
-        vertLines: { color: isDarkMode ? '#1f2937' : '#f0f0f0' },
-        horzLines: { color: isDarkMode ? '#1f2937' : '#f0f0f0' },
+        vertLines: { color: isDarkMode ? '#1f2937' : '#f1f5f9' },
+        horzLines: { color: isDarkMode ? '#1f2937' : '#f1f5f9' },
       },
       timeScale: {
-        borderColor: isDarkMode ? '#374151' : '#e1e1e1',
+        borderColor: isDarkMode ? '#374151' : '#e2e8f0',
         timeVisible: true,
         fixRightEdge: true,
+        rightOffset: 0,
       },
     });
 
@@ -93,15 +112,17 @@ export const KLineChart: React.FC<KLineChartProps> = ({
     if (chartRef.current) {
       chartRef.current.applyOptions({
         layout: {
-          background: { type: ColorType.Solid, color: isDarkMode ? '#111827' : 'white' },
-          textColor: isDarkMode ? '#9ca3af' : 'black',
+          background: { type: ColorType.Solid, color: 'transparent' },
+          textColor: isDarkMode ? '#9ca3af' : '#64748b',
         },
         grid: {
-          vertLines: { color: isDarkMode ? '#1f2937' : '#f0f0f0' },
-          horzLines: { color: isDarkMode ? '#1f2937' : '#f0f0f0' },
+          vertLines: { color: isDarkMode ? '#1f2937' : '#f1f5f9' },
+          horzLines: { color: isDarkMode ? '#1f2937' : '#f1f5f9' },
         },
         timeScale: {
-          borderColor: isDarkMode ? '#374151' : '#e1e1e1',
+          borderColor: isDarkMode ? '#374151' : '#e2e8f0',
+          fixRightEdge: true,
+          rightOffset: 0,
         },
       });
     }
@@ -168,8 +189,12 @@ export const KLineChart: React.FC<KLineChartProps> = ({
       
       activeSeries.push(candlestickSeries);
 
-      if (data.length < 200 && !isLoadingMoreRef.current) {
-         chart.timeScale().fitContent();
+      if (!isLoadingMoreRef.current) {
+        if (!onLoadMore || data.length < 200) {
+          chart.timeScale().fitContent();
+        } else {
+          chart.timeScale().scrollToPosition(0, false);
+        }
       }
 
       // Indicators (MA, BB, MACD logic same as before but safe with series management)

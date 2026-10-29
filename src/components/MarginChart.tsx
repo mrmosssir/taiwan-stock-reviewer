@@ -61,6 +61,8 @@ export const MarginChart: React.FC<MarginChartProps> = ({ data }) => {
       },
       timeScale: {
         borderColor: isDarkMode ? '#374151' : '#e2e8f0',
+        fixRightEdge: true,
+        rightOffset: 0,
       },
       rightPriceScale: {
         borderColor: isDarkMode ? '#374151' : '#e2e8f0',

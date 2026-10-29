@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Home } from './pages/Home';
 import { StockDetail } from './pages/StockDetail';
+import { MarketOverview } from './pages/MarketOverview';
 
 import { WatchlistProvider } from './context/WatchlistContext';
 
@@ -10,6 +11,7 @@ function App() {
       <WatchlistProvider>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/market" element={<MarketOverview />} />
           <Route path="/stock/:symbol" element={<StockDetail />} />
         </Routes>
       </WatchlistProvider>
