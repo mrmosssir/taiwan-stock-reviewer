@@ -1,5 +1,5 @@
 import { SMA, MACD, Stochastic, BollingerBands, RSI, ADX } from 'technicalindicators';
-import type { StockCandle, InstitutionalData, StockTicker, ComprehensiveFinancials } from '../api';
+import type { StockCandle, InstitutionalData, StockTicker, ComprehensiveFinancials, MarketDailyRecord } from '../api';
 import type { SeriesMarker, Time } from 'lightweight-charts';
 
 // Helper to pad results to match input length
@@ -577,4 +577,300 @@ export const calculateSignals = (
     default:
       return calculateTrendStrategy(candles, institutional, ticker, financials);
   }
+};
+
+// ============================================================================
+// 大盤五段式動態槓桿策略 (方案 B：0050 正二現股 + 現金 + 正二融資)
+// ============================================================================
+
+export type MarketStrategyMode = 'advanced_3x' | 'steady_2_5x' | 'off';
+
+export interface MarketSignalEvent {
+  date: string;
+  fromExposure: number;
+  toExposure: number;
+  signalText: string;
+  color: string;
+  isBuy: boolean;
+  reason: string;
+  close: number;
+  score: number;
+}
+
+export interface MarketPositionStatus {
+  exposure: number;
+  tierName: string;
+  allocationText: string;
+  altAllocationText: string;
+  spot2xPct: number;
+  margin2xPct: number;
+  cashPct: number;
+  lastSignalText: string;
+  lastSignalDate: string;
+  lastSignalReason: string;
+  ma20: number;
+  scoreMa3: number;
+  scoreMa5: number;
+}
+
+export interface MarketStrategyResult {
+  markers: SeriesMarker<Time>[];
+  currentPosition: MarketPositionStatus;
+  events: MarketSignalEvent[];
+}
+
+export const getMarketTierInfo = (exposure: number, mode: MarketStrategyMode = 'advanced_3x') => {
+  if (exposure >= 2.5) {
+    const is3x = mode === 'advanced_3x' || exposure >= 3.0;
+    return {
+      tierName: is3x ? '3.0x 主升滿倉檔' : '2.5x 主升穩健檔',
+      allocationText: is3x
+        ? '67% 0050正二現股 + 33% 自備款正二融資'
+        : '83% 0050正二現股 + 17% 自備款正二融資',
+      altAllocationText: is3x
+        ? '總持倉為本金 150% 之正二市值 (整戶維持率 250%)'
+        : '總持倉為本金 125% 之正二市值 (整戶維持率 357%)',
+      spot2xPct: is3x ? 67 : 83,
+      margin2xPct: is3x ? 33 : 17,
+      cashPct: 0,
+    };
+  }
+  if (exposure === 2.0) {
+    return {
+      tierName: '2.0x 強勢多頭檔',
+      allocationText: '100% 0050正二現股 (0 融資)',
+      altAllocationText: '全倉持有正二現股，等效 200% 大盤曝險',
+      spot2xPct: 100,
+      margin2xPct: 0,
+      cashPct: 0,
+    };
+  }
+  if (exposure === 1.5) {
+    return {
+      tierName: '1.5x 多頭震盪檔',
+      allocationText: '75% 0050正二現股 + 25% 現金',
+      altAllocationText: '或 50% 0050正二現股 + 50% 0050現股',
+      spot2xPct: 75,
+      margin2xPct: 0,
+      cashPct: 25,
+    };
+  }
+  if (exposure === 1.0) {
+    return {
+      tierName: '1.0x 基礎試單 / 防守檔',
+      allocationText: '50% 0050正二現股 + 50% 現金',
+      altAllocationText: '或 100% 0050現股 (保留一半現金防震盪)',
+      spot2xPct: 50,
+      margin2xPct: 0,
+      cashPct: 50,
+    };
+  }
+  return {
+    tierName: '0x 空手避險檔',
+    allocationText: '100% 現金 (空手觀望)',
+    altAllocationText: '全數資金退場避險，等待右側翻多或破底翻訊號',
+    spot2xPct: 0,
+    margin2xPct: 0,
+    cashPct: 100,
+  };
+};
+
+export const calculateMarketStrategySignals = (
+  records: MarketDailyRecord[],
+  mode: MarketStrategyMode = 'advanced_3x'
+): MarketStrategyResult => {
+  const defaultTier = getMarketTierInfo(0, mode);
+  if (!records || records.length === 0) {
+    return {
+      markers: [],
+      currentPosition: {
+        exposure: 0,
+        ...defaultTier,
+        lastSignalText: '無資料',
+        lastSignalDate: '-',
+        lastSignalReason: '-',
+        ma20: 0,
+        scoreMa3: 50,
+        scoreMa5: 50,
+      },
+      events: [],
+    };
+  }
+
+  const maxLev = mode === 'steady_2_5x' ? 2.5 : 3.0;
+  const markers: SeriesMarker<Time>[] = [];
+  const events: MarketSignalEvent[] = [];
+
+  let curExposure = 0;
+  let lastSignalText = 'Sell All';
+  let lastSignalDate = records[0].date;
+  let lastSignalReason = '初始空手狀態';
+
+  // Precompute MA20, Score_MA3, Score_MA5 across all records
+  const ma20List: number[] = [];
+  const scoreMa3List: number[] = [];
+  const scoreMa5List: number[] = [];
+
+  for (let i = 0; i < records.length; i++) {
+    // MA20: prefer backend-computed ma20 if valid, else progressive average up to 20 days
+    if (records[i].ma20 && records[i].ma20! > 0) {
+      ma20List.push(records[i].ma20!);
+    } else {
+      const start20 = Math.max(0, i - 19);
+      const slice20 = records.slice(start20, i + 1);
+      ma20List.push(slice20.reduce((sum, r) => sum + r.close, 0) / slice20.length);
+    }
+
+    const start3 = Math.max(0, i - 2);
+    const slice3 = records.slice(start3, i + 1);
+    scoreMa3List.push(slice3.reduce((sum, r) => sum + r.score, 0) / slice3.length);
+
+    const start5 = Math.max(0, i - 4);
+    const slice5 = records.slice(start5, i + 1);
+    scoreMa5List.push(slice5.reduce((sum, r) => sum + r.score, 0) / slice5.length);
+  }
+
+  for (let i = 2; i < records.length; i++) {
+    const today = records[i];
+    const prev = records[i - 1];
+    const prev2 = records[i - 2];
+    const ma20 = ma20List[i];
+    const scoreMa3 = scoreMa3List[i];
+    const scoreMa5 = scoreMa5List[i];
+
+    let targetExposure = curExposure;
+    let reason = '';
+    let isLeftSideBottom = false;
+
+    // 1. 趨勢破位清倉 (0x)
+    if (
+      (today.score <= 40 && prev.score <= 40 && today.close < ma20) ||
+      (scoreMa5 < 36 && today.close < ma20)
+    ) {
+      targetExposure = 0;
+      reason = '分數連兩日 ≤ 40 (或 5日均分 < 36) 且跌破月線 MA20，全面清倉避險';
+    }
+    // 2. 主升段噴出 (3.0x 或 2.5x)
+    else if (today.score >= 75 && scoreMa3 >= 68 && today.close >= ma20) {
+      targetExposure = maxLev;
+      reason = `分數 ≥ 75 (${today.score}分) 且 3日均分 ≥ 68 站穩月線，啟動主升段融資滿倉`;
+    }
+    // 3. 強勢多頭 (2.0x)
+    else if (today.score >= 65 && today.close >= ma20) {
+      targetExposure = 2.0;
+      reason =
+        curExposure > 2.0
+          ? `分數回落至 65~74 區間 (${today.score}分)，退掉融資保留 100% 正二現股`
+          : `分數 ≥ 65 (${today.score}分) 且站穩月線 MA20，順勢加碼至 100% 正二現股`;
+    }
+    // 4. 持倉中動態調節 (curExposure > 0)
+    else if (curExposure > 0) {
+      if (today.close < ma20 || today.score < 55) {
+        targetExposure = 1.0;
+        reason =
+          today.close < ma20
+            ? `指數跌破月線 MA20 (${Math.round(ma20)})，部位減半退守 1x 基本倉`
+            : `分數跌破 55 分 (${today.score}分)，部位減半退守 1x 基本倉`;
+      } else {
+        targetExposure = Math.min(curExposure, 1.5);
+        if (targetExposure !== curExposure) {
+          reason = `分數回落至 55~64 震盪區 (${today.score}分) 但守住月線，降檔至 1.5x`;
+        }
+      }
+    }
+    // 5. 空手建倉 (curExposure === 0)
+    else if (curExposure === 0) {
+      const rightSideEntry = today.score >= 55 && scoreMa3 >= 50;
+      const leftSideEntry =
+        (prev.score <= 30 || prev2.score <= 30) &&
+        today.score - prev.score >= 12 &&
+        today.marginDiff <= 0;
+
+      if (rightSideEntry || leftSideEntry) {
+        targetExposure = 1.0;
+        isLeftSideBottom = !rightSideEntry && leftSideEntry;
+        reason = isLeftSideBottom
+          ? `極度恐慌後單日急彈 +${today.score - prev.score} 分且融資斷頭減少，左側破底翻抄底 1x`
+          : `分數突破 55 分 (${today.score}分) 且 3日均分 ≥ 50，右側翻多建倉 1x`;
+      }
+    }
+
+    if (targetExposure !== curExposure) {
+      const isBuy = targetExposure > curExposure;
+      let signalText = '';
+      let color = '';
+
+      if (isBuy) {
+        if (targetExposure === 1.0) {
+          signalText = isLeftSideBottom ? 'Buy x1(底)' : 'Buy x1';
+          color = '#ec4899'; // pink-500
+        } else if (targetExposure === 2.0) {
+          signalText = 'Buy x2';
+          color = '#ef4444'; // red-500
+        } else {
+          signalText = targetExposure === 3.0 ? 'Buy x3' : 'Buy x2.5';
+          color = '#a855f7'; // purple-500
+        }
+      } else {
+        if (targetExposure === 2.0) {
+          signalText = 'Sell x2';
+          color = '#f59e0b'; // amber-500
+        } else if (targetExposure === 1.5) {
+          signalText = 'Sell x1.5';
+          color = '#f97316'; // orange-500
+        } else if (targetExposure === 1.0) {
+          signalText = 'Sell x1';
+          color = '#06b6d4'; // cyan-500
+        } else {
+          signalText = 'Sell All';
+          color = '#10b981'; // emerald-500
+        }
+      }
+
+      if (mode !== 'off') {
+        markers.push({
+          time: today.date as Time,
+          position: isBuy ? 'belowBar' : 'aboveBar',
+          color,
+          shape: isBuy ? 'arrowUp' : 'arrowDown',
+          text: signalText,
+        });
+      }
+
+      events.push({
+        date: today.date,
+        fromExposure: curExposure,
+        toExposure: targetExposure,
+        signalText,
+        color,
+        isBuy,
+        reason,
+        close: today.close,
+        score: today.score,
+      });
+
+      curExposure = targetExposure;
+      lastSignalText = signalText;
+      lastSignalDate = today.date;
+      lastSignalReason = reason;
+    }
+  }
+
+  const lastIdx = records.length - 1;
+  const tierInfo = getMarketTierInfo(curExposure, mode);
+
+  return {
+    markers,
+    currentPosition: {
+      exposure: curExposure,
+      ...tierInfo,
+      lastSignalText,
+      lastSignalDate,
+      lastSignalReason,
+      ma20: ma20List[lastIdx] || 0,
+      scoreMa3: scoreMa3List[lastIdx] || 50,
+      scoreMa5: scoreMa5List[lastIdx] || 50,
+    },
+    events,
+  };
 };
