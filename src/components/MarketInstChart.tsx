@@ -80,7 +80,14 @@ export const MarketInstChart: React.FC<MarketInstChartProps> = ({ data }) => {
     });
 
     series.setData(formatted);
-    chart.timeScale().fitContent();
+    if (data.length > 120) {
+      chart.timeScale().setVisibleLogicalRange({
+        from: data.length - 120,
+        to: data.length - 1,
+      });
+    } else {
+      chart.timeScale().fitContent();
+    }
 
     const handleResize = () => {
       if (chartContainerRef.current) {

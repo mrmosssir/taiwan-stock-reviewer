@@ -580,7 +580,7 @@ export const calculateSignals = (
 };
 
 // ============================================================================
-// 大盤五段式動態槓桿策略 (方案 B：0050 正二現股 + 現金 + 正二融資)
+// 大盤低頻大波段動態槓桿策略 (0050 正二現股 + 現金 + 正二融資：買支撐、賣高乖離)
 // ============================================================================
 
 export type MarketStrategyMode = 'advanced_3x' | 'steady_2_5x' | 'off';
@@ -595,6 +595,7 @@ export interface MarketSignalEvent {
   reason: string;
   close: number;
   score: number;
+  bias20Pct: number;
 }
 
 export interface MarketPositionStatus {
@@ -609,6 +610,7 @@ export interface MarketPositionStatus {
   lastSignalDate: string;
   lastSignalReason: string;
   ma20: number;
+  bias20Pct: number;
   scoreMa3: number;
   scoreMa5: number;
 }
@@ -637,22 +639,12 @@ export const getMarketTierInfo = (exposure: number, mode: MarketStrategyMode = '
   }
   if (exposure === 2.0) {
     return {
-      tierName: '2.0x 強勢多頭檔',
+      tierName: '2.0x 波段主力檔',
       allocationText: '100% 0050正二現股 (0 融資)',
-      altAllocationText: '全倉持有正二現股，等效 200% 大盤曝險',
+      altAllocationText: '全倉持有正二現股抱波段，等效 200% 大盤曝險',
       spot2xPct: 100,
       margin2xPct: 0,
       cashPct: 0,
-    };
-  }
-  if (exposure === 1.5) {
-    return {
-      tierName: '1.5x 多頭震盪檔',
-      allocationText: '75% 0050正二現股 + 25% 現金',
-      altAllocationText: '或 50% 0050正二現股 + 50% 0050現股',
-      spot2xPct: 75,
-      margin2xPct: 0,
-      cashPct: 25,
     };
   }
   if (exposure === 1.0) {
@@ -668,7 +660,7 @@ export const getMarketTierInfo = (exposure: number, mode: MarketStrategyMode = '
   return {
     tierName: '0x 空手避險檔',
     allocationText: '100% 現金 (空手觀望)',
-    altAllocationText: '全數資金退場避險，等待右側翻多或破底翻訊號',
+    altAllocationText: '全數資金退場避險，等待站上月線起漲或破底翻訊號',
     spot2xPct: 0,
     margin2xPct: 0,
     cashPct: 100,
@@ -690,6 +682,7 @@ export const calculateMarketStrategySignals = (
         lastSignalDate: '-',
         lastSignalReason: '-',
         ma20: 0,
+        bias20Pct: 0,
         scoreMa3: 50,
         scoreMa5: 50,
       },
@@ -705,93 +698,162 @@ export const calculateMarketStrategySignals = (
   let lastSignalText = 'Sell All';
   let lastSignalDate = records[0].date;
   let lastSignalReason = '初始空手狀態';
+  let lastChangeIdx = 0;
+  let isLeftBottomHold = false;
+  let bottomLow = 0;
 
-  // Precompute MA20, Score_MA3, Score_MA5 across all records
+  // Precompute MA5, MA20, Score_MA3, Score_MA5 across all records
+  const ma5List: number[] = [];
   const ma20List: number[] = [];
   const scoreMa3List: number[] = [];
   const scoreMa5List: number[] = [];
 
   for (let i = 0; i < records.length; i++) {
-    // MA20: prefer backend-computed ma20 if valid, else progressive average up to 20 days
+    if (records[i].ma5 && records[i].ma5! > 0) {
+      ma5List.push(records[i].ma5!);
+    } else {
+      const slice5 = records.slice(Math.max(0, i - 4), i + 1);
+      ma5List.push(slice5.reduce((sum, r) => sum + r.close, 0) / slice5.length);
+    }
+
     if (records[i].ma20 && records[i].ma20! > 0) {
       ma20List.push(records[i].ma20!);
     } else {
-      const start20 = Math.max(0, i - 19);
-      const slice20 = records.slice(start20, i + 1);
+      const slice20 = records.slice(Math.max(0, i - 19), i + 1);
       ma20List.push(slice20.reduce((sum, r) => sum + r.close, 0) / slice20.length);
     }
 
-    const start3 = Math.max(0, i - 2);
-    const slice3 = records.slice(start3, i + 1);
+    const slice3 = records.slice(Math.max(0, i - 2), i + 1);
     scoreMa3List.push(slice3.reduce((sum, r) => sum + r.score, 0) / slice3.length);
 
-    const start5 = Math.max(0, i - 4);
-    const slice5 = records.slice(start5, i + 1);
-    scoreMa5List.push(slice5.reduce((sum, r) => sum + r.score, 0) / slice5.length);
+    const sliceS5 = records.slice(Math.max(0, i - 4), i + 1);
+    scoreMa5List.push(sliceS5.reduce((sum, r) => sum + r.score, 0) / sliceS5.length);
   }
 
   for (let i = 2; i < records.length; i++) {
     const today = records[i];
     const prev = records[i - 1];
     const prev2 = records[i - 2];
+
+    const ma5 = ma5List[i];
     const ma20 = ma20List[i];
+    const prevMa20 = ma20List[i - 1];
+    const prev2Ma20 = ma20List[i - 2];
     const scoreMa3 = scoreMa3List[i];
     const scoreMa5 = scoreMa5List[i];
+
+    const bias20 = ma20 > 0 ? (today.close - ma20) / ma20 : 0;
+    const bias20Pct = Number((bias20 * 100).toFixed(2));
+    const daysSinceChange = i - lastChangeIdx;
+
+    // 若原本為左側破底翻試單，一旦收盤正式站上月線 MA20，即轉為正常右側波段持倉
+    if (isLeftBottomHold && today.close >= ma20) {
+      isLeftBottomHold = false;
+    }
+
+    const belowMa20_2d = today.close < ma20 && prev.close < prevMa20;
+    const belowMa20_3d = belowMa20_2d && prev2.close < prev2Ma20;
 
     let targetExposure = curExposure;
     let reason = '';
     let isLeftSideBottom = false;
 
-    // 1. 趨勢破位清倉 (0x)
-    if (
-      (today.score <= 40 && prev.score <= 40 && today.close < ma20) ||
-      (scoreMa5 < 36 && today.close < ma20)
-    ) {
-      targetExposure = 0;
-      reason = '分數連兩日 ≤ 40 (或 5日均分 < 36) 且跌破月線 MA20，全面清倉避險';
+    // ------------------------------------------------------------------------
+    // 1. 趨勢破位清倉 (➔ 0x Sell All)：連續跌破月線 + 5日均分轉空，過濾單日洗盤
+    // ------------------------------------------------------------------------
+    if (curExposure > 0) {
+      if (isLeftBottomHold) {
+        if (today.close < bottomLow || (daysSinceChange >= 2 && today.score <= 28)) {
+          targetExposure = 0;
+          isLeftBottomHold = false;
+          reason = '左側抄底跌破前低停損線，退回 100% 現金 (0x)';
+        }
+      } else if (
+        (belowMa20_2d && scoreMa5 < 42) ||
+        (belowMa20_3d && scoreMa5 < 45) ||
+        (today.close < ma20 * 0.975 && scoreMa3 < 40)
+      ) {
+        targetExposure = 0;
+        reason = `連續跌破月線 MA20 且 5日均分轉空 (${scoreMa5.toFixed(1)}分)，波段趨勢結束清倉 (0x)`;
+      }
     }
-    // 2. 主升段噴出 (3.0x 或 2.5x)
-    else if (today.score >= 75 && scoreMa3 >= 68 && today.close >= ma20) {
-      targetExposure = maxLev;
-      reason = `分數 ≥ 75 (${today.score}分) 且 3日均分 ≥ 68 站穩月線，啟動主升段融資滿倉`;
+
+    // ------------------------------------------------------------------------
+    // 2. 高檔正乖離過大「逢高獲利了結融資」 (3x ➔ 2x Sell x2)：真正賣在波段高點！
+    // ------------------------------------------------------------------------
+    if (targetExposure === curExposure && curExposure >= 2.5 && daysSinceChange >= 4) {
+      if (bias20 >= 0.055 && (today.score < 68 || today.close < today.open)) {
+        targetExposure = 2.0;
+        reason = `月線正乖離過大 (+${bias20Pct}%) 且短線轉弱，逢高獲利了結融資，保留 100% 正二現股 (2x)`;
+      }
     }
-    // 3. 強勢多頭 (2.0x)
-    else if (today.score >= 65 && today.close >= ma20) {
-      targetExposure = 2.0;
-      reason =
-        curExposure > 2.0
-          ? `分數回落至 65~74 區間 (${today.score}分)，退掉融資保留 100% 正二現股`
-          : `分數 ≥ 65 (${today.score}分) 且站穩月線 MA20，順勢加碼至 100% 正二現股`;
-    }
-    // 4. 持倉中動態調節 (curExposure > 0)
-    else if (curExposure > 0) {
-      if (today.close < ma20 || today.score < 55) {
+
+    // ------------------------------------------------------------------------
+    // 3. 跌破月線整理降檔防守 (>1x ➔ 1x Sell x1)：連兩日破月線但均分尚未崩壞
+    // ------------------------------------------------------------------------
+    if (targetExposure === curExposure && curExposure > 1.0 && daysSinceChange >= 4) {
+      if (belowMa20_2d && scoreMa5 >= 42 && scoreMa5 < 48) {
         targetExposure = 1.0;
-        reason =
-          today.close < ma20
-            ? `指數跌破月線 MA20 (${Math.round(ma20)})，部位減半退守 1x 基本倉`
-            : `分數跌破 55 分 (${today.score}分)，部位減半退守 1x 基本倉`;
-      } else {
-        targetExposure = Math.min(curExposure, 1.5);
-        if (targetExposure !== curExposure) {
-          reason = `分數回落至 55~64 震盪區 (${today.score}分) 但守住月線，降檔至 1.5x`;
+        reason = `連續兩日跌破月線 MA20 (5日均分 ${scoreMa5.toFixed(1)})，退掉槓桿降回 1x 基本倉防守`;
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // 4. 空手波段起漲建倉 (0x ➔ 2x 或 1x)：買在剛站上月線起漲點或左側破底翻！
+    // ------------------------------------------------------------------------
+    if (targetExposure === curExposure && curExposure === 0) {
+      const leftBottom =
+        bias20 <= -0.02 &&
+        (prev.score <= 30 || prev2.score <= 30) &&
+        today.score - prev.score >= 15 &&
+        today.marginDiff <= 0 &&
+        today.close >= ma5;
+
+      if (leftBottom) {
+        targetExposure = 1.0;
+        isLeftSideBottom = true;
+        isLeftBottomHold = true;
+        bottomLow = Math.min(today.low, prev.low, prev2.low) * 0.995;
+        reason = `極度恐慌後急彈 +${today.score - prev.score}分、融資減少且站上5日線，左側破底翻抄底 (1x)`;
+      } else if (today.close >= ma20 && scoreMa5 >= 53) {
+        isLeftBottomHold = false;
+        if (bias20 <= 0.035) {
+          targetExposure = 2.0;
+          reason = `初站上月線起漲點 (乖離僅 +${bias20Pct}%) 且 5日均分翻多 (${scoreMa5.toFixed(1)})，直接建倉全倉正二 (2x)`;
+        } else {
+          targetExposure = 1.0;
+          reason = `站上月線且 5日均分翻多 (${scoreMa5.toFixed(1)})，因乖離較大 (+${bias20Pct}%) 先建基本倉 (1x)`;
         }
       }
     }
-    // 5. 空手建倉 (curExposure === 0)
-    else if (curExposure === 0) {
-      const rightSideEntry = today.score >= 55 && scoreMa3 >= 50;
-      const leftSideEntry =
-        (prev.score <= 30 || prev2.score <= 30) &&
-        today.score - prev.score >= 12 &&
-        today.marginDiff <= 0;
 
-      if (rightSideEntry || leftSideEntry) {
-        targetExposure = 1.0;
-        isLeftSideBottom = !rightSideEntry && leftSideEntry;
-        reason = isLeftSideBottom
-          ? `極度恐慌後單日急彈 +${today.score - prev.score} 分且融資斷頭減少，左側破底翻抄底 1x`
-          : `分數突破 55 分 (${today.score}分) 且 3日均分 ≥ 50，右側翻多建倉 1x`;
+    // ------------------------------------------------------------------------
+    // 5. 基本倉確認站穩月線升檔 (1x ➔ 2x Buy x2)：低乖離確認多頭升至全倉正二
+    // ------------------------------------------------------------------------
+    if (targetExposure === curExposure && curExposure === 1.0 && daysSinceChange >= 3) {
+      if (today.close >= ma20 && scoreMa5 >= 53 && bias20 <= 0.04) {
+        targetExposure = 2.0;
+        isLeftBottomHold = false;
+        reason = `站穩月線且乖離適中 (+${bias20Pct}%)、5日均分 ${scoreMa5.toFixed(1)}，升檔至全倉正二 (2x)`;
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // 6. 多頭回測月線支撐「逢低加碼融資」 (➔ 3x / 2.5x)：絕不在大漲高點追價！
+    // ------------------------------------------------------------------------
+    if (
+      targetExposure === curExposure &&
+      (curExposure === 1.0 || curExposure === 2.0) &&
+      daysSinceChange >= 3
+    ) {
+      const isBullTrend = ma20 >= prevMa20 && scoreMa5 >= 56;
+      const isNearMa20Support = bias20 >= -0.005 && bias20 <= 0.022 && today.close >= ma20;
+      const isBounceRed = today.close > today.open && today.score >= 60;
+
+      if (isBullTrend && isNearMa20Support && isBounceRed) {
+        targetExposure = maxLev;
+        isLeftBottomHold = false;
+        reason = `多頭趨勢回測月線支撐低位階 (乖離僅 +${bias20Pct}%) 收紅止跌，逢低加碼正二融資 (${maxLev}x)`;
       }
     }
 
@@ -813,11 +875,8 @@ export const calculateMarketStrategySignals = (
         }
       } else {
         if (targetExposure === 2.0) {
-          signalText = 'Sell x2';
+          signalText = 'Sell x2(高檔鎖利)';
           color = '#f59e0b'; // amber-500
-        } else if (targetExposure === 1.5) {
-          signalText = 'Sell x1.5';
-          color = '#f97316'; // orange-500
         } else if (targetExposure === 1.0) {
           signalText = 'Sell x1';
           color = '#06b6d4'; // cyan-500
@@ -847,16 +906,21 @@ export const calculateMarketStrategySignals = (
         reason,
         close: today.close,
         score: today.score,
+        bias20Pct,
       });
 
       curExposure = targetExposure;
       lastSignalText = signalText;
       lastSignalDate = today.date;
       lastSignalReason = reason;
+      lastChangeIdx = i;
     }
   }
 
   const lastIdx = records.length - 1;
+  const lastMa20 = ma20List[lastIdx] || 0;
+  const lastBias20Pct =
+    lastMa20 > 0 ? Number((((records[lastIdx].close - lastMa20) / lastMa20) * 100).toFixed(2)) : 0;
   const tierInfo = getMarketTierInfo(curExposure, mode);
 
   return {
@@ -867,7 +931,8 @@ export const calculateMarketStrategySignals = (
       lastSignalText,
       lastSignalDate,
       lastSignalReason,
-      ma20: ma20List[lastIdx] || 0,
+      ma20: lastMa20,
+      bias20Pct: lastBias20Pct,
       scoreMa3: scoreMa3List[lastIdx] || 50,
       scoreMa5: scoreMa5List[lastIdx] || 50,
     },

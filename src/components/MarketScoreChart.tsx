@@ -126,7 +126,14 @@ export const MarketScoreChart: React.FC<MarketScoreChartProps> = ({ data }) => {
       setHoveredData(match || null);
     });
 
-    chart.timeScale().fitContent();
+    if (data.length > 120) {
+      chart.timeScale().setVisibleLogicalRange({
+        from: data.length - 120,
+        to: data.length - 1,
+      });
+    } else {
+      chart.timeScale().fitContent();
+    }
 
     const handleResize = () => {
       if (chartContainerRef.current) {

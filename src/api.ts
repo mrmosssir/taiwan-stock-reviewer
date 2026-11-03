@@ -511,12 +511,32 @@ export const fetchMarketLatest = async (): Promise<MarketDailyRecord | null> => 
   }
 };
 
-export const fetchMarketHistory = async (days: number | string = 120): Promise<MarketDailyRecord[]> => {
+export const fetchMarketHistory = async (
+  days: number | string = 480,
+  beforeDate?: string
+): Promise<MarketDailyRecord[]> => {
   try {
-    const response = await fetch(`https://cloud-stock-chooser.mrmosssir.workers.dev/api/market/history?days=${days}`);
+    const params = new URLSearchParams({ days: String(days) });
+    if (beforeDate) {
+      params.set('before', beforeDate);
+    }
+    const response = await fetch(`https://cloud-stock-chooser.mrmosssir.workers.dev/api/market/history?${params.toString()}`);
     const result = await response.json();
     if (result.success && Array.isArray(result.data)) {
-      return result.data.map(normalizeMarketRecord);
+      const normalized: MarketDailyRecord[] = result.data.map(normalizeMarketRecord);
+      const filtered = beforeDate ? normalized.filter((r) => r.date < beforeDate) : normalized;
+      // 若遠端 Worker 尚未部署支援 before 參數，導致回傳最新 480 筆而被過濾為空，自動 fallback 以 days=all 取得對應區間
+      if (beforeDate && filtered.length === 0 && result.hasMore === undefined) {
+        const allRes = await fetch('https://cloud-stock-chooser.mrmosssir.workers.dev/api/market/history?days=all');
+        const allJson = await allRes.json();
+        if (allJson.success && Array.isArray(allJson.data)) {
+          const allNorm: MarketDailyRecord[] = allJson.data.map(normalizeMarketRecord);
+          const olderAll = allNorm.filter((r) => r.date < beforeDate);
+          const limit = typeof days === 'number' ? days : parseInt(String(days), 10) || 480;
+          return olderAll.slice(-limit);
+        }
+      }
+      return filtered;
     }
     return [];
   } catch (error) {
