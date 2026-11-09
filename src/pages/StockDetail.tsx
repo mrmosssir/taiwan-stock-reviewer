@@ -22,6 +22,7 @@ import { KLineChart } from '../components/KLineChart';
 import { MarginChart } from '../components/MarginChart';
 import { ArrowLeft, Users, CreditCard, PieChart, TrendingUp, BarChart3, Activity, Wallet, Star } from 'lucide-react';
 import { calculateSignals, SIGNAL_STRATEGIES } from '../utils/signals';
+import { aggregateCandles, aggregateInstitutional } from '../utils/resample';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useWatchlist } from '../context/WatchlistContext';
 
@@ -97,9 +98,17 @@ export const StockDetail: React.FC = () => {
   const [isAdjusted, setIsAdjusted] = useState(false);
   const [activeStrategy, setActiveStrategy] = useState(SIGNAL_STRATEGIES[0].id);
 
-  const displayCandles = useMemo(() => {
+  const baseCandles = useMemo(() => {
     return isAdjusted ? adjustCandles(rawCandles, dividends) : rawCandles;
   }, [isAdjusted, rawCandles, dividends]);
+
+  const displayCandles = useMemo(() => {
+    return aggregateCandles(baseCandles, timeframe);
+  }, [baseCandles, timeframe]);
+
+  const displayInstitutional = useMemo(() => {
+    return aggregateInstitutional(institutional, timeframe);
+  }, [institutional, timeframe]);
 
   const [isDarkMode, setIsDarkMode] = useState(() => document.documentElement.classList.contains('dark'));
 
@@ -125,8 +134,8 @@ export const StockDetail: React.FC = () => {
 
   // Calculate signals
   const markers = useMemo(() => {
-    return calculateSignals(activeStrategy, displayCandles, institutional, ticker, financials);
-  }, [activeStrategy, displayCandles, institutional, ticker, financials]);
+    return calculateSignals(activeStrategy, displayCandles, displayInstitutional, ticker, financials);
+  }, [activeStrategy, displayCandles, displayInstitutional, ticker, financials]);
 
   useEffect(() => {
     if (rawCandles.length > 0) {
@@ -140,7 +149,8 @@ export const StockDetail: React.FC = () => {
     oldestDate.setDate(oldestDate.getDate() - 1);
     const newTo = oldestDate.toISOString().split('T')[0];
     try {
-      const newCandles = await fetchHistoricalCandles(symbol, timeframe, 360, newTo);
+      const loadDays = timeframe === 'M' ? 730 : 360;
+      const newCandles = await fetchHistoricalCandles(symbol, timeframe, loadDays, newTo);
       if (newCandles.length > 0) {
         setRawCandles(current => {
           const combined = [...newCandles, ...current];
@@ -155,7 +165,7 @@ export const StockDetail: React.FC = () => {
 
   // 盤中即時更新 (每 15 秒輪詢一次)
   useEffect(() => {
-    if (!symbol || timeframe !== 'D') return;
+    if (!symbol) return;
 
     const intervalId = setInterval(async () => {
       try {
@@ -209,18 +219,19 @@ export const StockDetail: React.FC = () => {
     }, 15000);
 
     return () => clearInterval(intervalId);
-  }, [symbol, timeframe]);
+  }, [symbol]);
 
   useEffect(() => {
     const loadAllData = async () => {
       if (!symbol) return;
       setLoading(true);
       try {
+        const daysToFetch = timeframe === 'M' ? 1800 : timeframe === 'W' ? 730 : 360;
         const [tickerData, candlesData, instData, marginData, finData, quoteData, divs] = await Promise.all([
           fetchTicker(symbol),
-          fetchHistoricalCandles(symbol, timeframe, 360),
-          fetchInstitutionalInvestors(symbol, 360),
-          fetchMarginTrading(symbol, 360),
+          fetchHistoricalCandles(symbol, timeframe, daysToFetch),
+          fetchInstitutionalInvestors(symbol, daysToFetch),
+          fetchMarginTrading(symbol, daysToFetch),
           fetchFinancialStatements(symbol),
           fetchQuote(symbol).catch(() => null),
           fetchDividends(symbol, 3600)
@@ -229,7 +240,7 @@ export const StockDetail: React.FC = () => {
         let finalCandles = [...candlesData];
         
         // 初始載入時，整合即時報價至 K 線
-        if (quoteData && timeframe === 'D' && quoteData.lastPrice > 0) {
+        if (quoteData && quoteData.lastPrice > 0) {
           const d = quoteData.lastUpdated ? new Date(quoteData.lastUpdated) : new Date();
           const quoteDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
           

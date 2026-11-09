@@ -83,13 +83,16 @@ export interface StockCandle {
 
 export const fetchHistoricalCandles = async (
   symbol: string,
-  _timeframe: string = 'D',
+  timeframe: string = 'D',
   rangeDays: number = 360,
   endDateStr?: string
 ): Promise<StockCandle[]> => {
+  const effectiveRange = rangeDays !== 360 
+    ? rangeDays 
+    : (timeframe === 'M' ? 1800 : timeframe === 'W' ? 730 : 360);
   const end = endDateStr ? new Date(endDateStr) : new Date();
   const start = new Date(end);
-  start.setDate(start.getDate() - rangeDays);
+  start.setDate(start.getDate() - effectiveRange);
 
   const from = start.toISOString().split('T')[0];
   const to = end.toISOString().split('T')[0];

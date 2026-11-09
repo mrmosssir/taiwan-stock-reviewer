@@ -25,11 +25,14 @@ import { MarketMarginBalanceChart } from '../components/MarketMarginBalanceChart
 import { fetchMarketHistory, fetchMarketLatest } from '../api';
 import type { MarketDailyRecord, StockCandle } from '../api';
 import { calculateMarketStrategySignals, type MarketStrategyMode } from '../utils/signals';
+import { aggregateMarketRecords } from '../utils/resample';
+import { calculateMarketSignals } from '../utils/marketEngine';
 
 export const MarketOverview = () => {
   const navigate = useNavigate();
   const [historyData, setHistoryData] = useState<MarketDailyRecord[]>([]);
   const [latestData, setLatestData] = useState<MarketDailyRecord | null>(null);
+  const [timeframe, setTimeframe] = useState<'D' | 'W' | 'M'>('D');
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'score' | 'inst' | 'futures' | 'margin'>('all');
@@ -44,14 +47,14 @@ export const MarketOverview = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // 單次 API 預設抓取最近 2 年（約 480 個交易日）
+      // 單次 API 預設抓取最近 3 年（約 720 個交易日），確保週線與月線均線結構完整
       const [history, latest] = await Promise.all([
-        fetchMarketHistory(480),
+        fetchMarketHistory(720),
         fetchMarketLatest()
       ]);
       setHistoryData(history);
       oldestDateRef.current = history.length > 0 ? history[0].date : null;
-      hasMoreRef.current = history.length >= 480;
+      hasMoreRef.current = history.length >= 720;
       setLatestData(latest || (history.length > 0 ? history[history.length - 1] : null));
     } catch (e) {
       console.error('Failed to load market data:', e);
@@ -64,7 +67,7 @@ export const MarketOverview = () => {
     loadData();
   }, []);
 
-  // 當使用者在 K 線圖往左滑動超過已載入的 2 年邊界時，自動向 API 請求更早的 2 年資料
+  // 當使用者在 K 線圖往左滑動超過已載入的邊界時，自動向 API 請求更早的資料
   const handleLoadMoreHistory = useCallback(async () => {
     if (isLoadingMoreRef.current || !hasMoreRef.current || !oldestDateRef.current) return;
     isLoadingMoreRef.current = true;
@@ -97,22 +100,29 @@ export const MarketOverview = () => {
     }
   }, []);
 
+  // 依選定時間週期 (日 / 週 / 月) 聚合大盤資料並重新計算多空指標與分數
+  const activeMarketData = useMemo(() => {
+    if (timeframe === 'D') return historyData;
+    const resampled = aggregateMarketRecords(historyData, timeframe);
+    return calculateMarketSignals(resampled);
+  }, [historyData, timeframe]);
+
   // 計算大盤五段式策略訊號與當前建議檔位
   const strategyResult = useMemo(() => {
-    return calculateMarketStrategySignals(historyData, strategyMode);
-  }, [historyData, strategyMode]);
+    return calculateMarketStrategySignals(activeMarketData, strategyMode);
+  }, [activeMarketData, strategyMode]);
 
   // 過濾出目前顯示區間內的 K 線標記
   const visibleMarkers = useMemo(() => {
-    if (strategyMode === 'off' || historyData.length === 0) return [];
-    const startDate = historyData[0].date;
+    if (strategyMode === 'off' || activeMarketData.length === 0) return [];
+    const startDate = activeMarketData[0].date;
     return strategyResult.markers.filter((m) => String(m.time) >= startDate);
-  }, [strategyResult.markers, historyData, strategyMode]);
+  }, [strategyResult.markers, activeMarketData, strategyMode]);
 
   // 將大盤資料轉換為 KLineChart 所需的 StockCandle 格式
   const candles: StockCandle[] = useMemo(
     () =>
-      historyData.map((d) => ({
+      activeMarketData.map((d) => ({
         date: d.date,
         open: d.open,
         high: d.high,
@@ -120,10 +130,16 @@ export const MarketOverview = () => {
         close: d.close,
         volume: d.volume,
       })),
-    [historyData]
+    [activeMarketData]
   );
 
-  const current = latestData || (historyData.length > 0 ? historyData[historyData.length - 1] : null);
+  const current = useMemo(() => {
+    if (timeframe === 'D') {
+      return latestData || (activeMarketData.length > 0 ? activeMarketData[activeMarketData.length - 1] : null);
+    }
+    return activeMarketData.length > 0 ? activeMarketData[activeMarketData.length - 1] : null;
+  }, [timeframe, latestData, activeMarketData]);
+
   const pos = strategyResult.currentPosition;
 
   const getStatusColor = (status?: string) => {
@@ -160,6 +176,23 @@ export const MarketOverview = () => {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* 時間週期切換器 */}
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+              {(['D', 'W', 'M'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTimeframe(t)}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    timeframe === t
+                      ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {t === 'D' ? '日線' : t === 'W' ? '週線' : '月線'}
+                </button>
+              ))}
+            </div>
+
             <button
               onClick={() => loadData()}
               disabled={isLoading}
@@ -205,10 +238,10 @@ export const MarketOverview = () => {
                     )
                   </span>
                   <span className="text-xs text-gray-400 dark:text-gray-500">
-                    成交金額：{((current.tradeValue ?? 0) / 1e8).toFixed(0)} 億元
+                    {timeframe === 'D' ? '成交金額' : timeframe === 'W' ? '週累計金額' : '月累計金額'}：{((current.tradeValue ?? 0) / 1e8).toFixed(0)} 億元
                   </span>
                   <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto md:ml-0">
-                    統計日期：{current.date}
+                    統計{timeframe === 'D' ? '日期' : timeframe === 'W' ? '週期' : '月份'}：{current.date}
                   </span>
                 </div>
               </div>
@@ -216,7 +249,9 @@ export const MarketOverview = () => {
               {/* 多空綜合量化評分卡 */}
               <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-900/60 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
                 <div className="text-right">
-                  <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">多空綜合指標評分</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                    {timeframe === 'D' ? '日' : timeframe === 'W' ? '週' : '月'}線多空指標評分
+                  </div>
                   <div className="text-2xl font-black text-gray-900 dark:text-gray-100">
                     {current.score} <span className="text-xs font-normal text-gray-500">/ 100</span>
                   </div>
@@ -357,12 +392,12 @@ export const MarketOverview = () => {
                 正在載入更早 2 年歷史...
               </span>
             )}
-            {historyData.length > 0 && (
+            {activeMarketData.length > 0 && (
               <span>
-                預設顯示近半年 K 線 · 往左滑動可看更早歷史（已載入{' '}
-                <strong className="text-gray-700 dark:text-gray-300">{historyData[0].date}</strong> ~{' '}
-                <strong className="text-gray-700 dark:text-gray-300">{historyData[historyData.length - 1].date}</strong>，共{' '}
-                {historyData.length} 日）
+                {timeframe === 'D' ? '預設顯示近半年 K 線 · 往左滑動可看更早歷史' : '往左滑動可載入更早歷史'}（已載入{' '}
+                <strong className="text-gray-700 dark:text-gray-300">{activeMarketData[0].date}</strong> ~{' '}
+                <strong className="text-gray-700 dark:text-gray-300">{activeMarketData[activeMarketData.length - 1].date}</strong>，共{' '}
+                {activeMarketData.length} {timeframe === 'D' ? '日' : timeframe === 'W' ? '週' : '月'}）
               </span>
             )}
           </div>
@@ -374,7 +409,7 @@ export const MarketOverview = () => {
             <RefreshCw size={28} className="animate-spin mx-auto mb-3 text-blue-500" />
             正在載入大盤走勢與指標資料...
           </div>
-        ) : historyData.length === 0 ? (
+        ) : activeMarketData.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-12 text-center text-gray-500 border border-gray-200 dark:border-gray-700 shadow-sm space-y-3">
             <BarChart3 size={40} className="mx-auto text-gray-400" />
             <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200">尚無大盤歷史資料</h3>
@@ -492,29 +527,29 @@ export const MarketOverview = () => {
                 data={candles}
                 markers={visibleMarkers}
                 indicators={{ ma: true, bollinger: false, macd: false, kd: false }}
-                initialVisibleBars={120}
+                initialVisibleBars={timeframe === 'M' ? 36 : timeframe === 'W' ? 60 : 120}
                 onLoadMore={handleLoadMoreHistory}
               />
             </div>
 
             {/* 2. 使用者特別要求：自訂多空分數走勢圖 (依狀態變色、標示多空門檻) */}
             {(activeTab === 'all' || activeTab === 'score') && (
-              <MarketScoreChart data={historyData} />
+              <MarketScoreChart data={activeMarketData} />
             )}
 
             {/* 3. 三大法人買賣超柱狀圖 */}
             {(activeTab === 'all' || activeTab === 'inst') && (
-              <MarketInstChart data={historyData} />
+              <MarketInstChart data={activeMarketData} />
             )}
 
             {/* 4. 外資台指期未平倉口數走勢圖 */}
             {(activeTab === 'all' || activeTab === 'futures') && (
-              <MarketFuturesChart data={historyData} />
+              <MarketFuturesChart data={activeMarketData} />
             )}
 
             {/* 5. 大盤融資融券餘額變化圖 */}
             {(activeTab === 'all' || activeTab === 'margin') && (
-              <MarketMarginBalanceChart data={historyData} />
+              <MarketMarginBalanceChart data={activeMarketData} />
             )}
           </div>
         )}
