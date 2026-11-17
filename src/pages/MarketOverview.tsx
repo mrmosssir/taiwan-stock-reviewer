@@ -27,6 +27,7 @@ import type { MarketDailyRecord, StockCandle } from '../api';
 import { calculateMarketStrategySignals, type MarketStrategyMode } from '../utils/signals';
 import { aggregateMarketRecords } from '../utils/resample';
 import { calculateMarketSignals } from '../utils/marketEngine';
+import { ChartSyncController } from '../utils/chartSync';
 
 export const MarketOverview = () => {
   const navigate = useNavigate();
@@ -99,6 +100,15 @@ export const MarketOverview = () => {
       setIsLoadingMore(false);
     }
   }, []);
+
+  // 多圖表時間軸與十字準心同步控制器 (確保 K 線、多空分數、法人、期貨、融資券同步滾動與對齊)
+  const syncController = useMemo(() => new ChartSyncController(), []);
+
+  useEffect(() => {
+    syncController.setOnLoadMore(handleLoadMoreHistory);
+  }, [syncController, handleLoadMoreHistory]);
+
+  const initialVisibleBars = timeframe === 'M' ? 36 : timeframe === 'W' ? 60 : 120;
 
   // 依選定時間週期 (日 / 週 / 月) 聚合大盤資料並重新計算多空指標與分數
   const activeMarketData = useMemo(() => {
@@ -527,29 +537,51 @@ export const MarketOverview = () => {
                 data={candles}
                 markers={visibleMarkers}
                 indicators={{ ma: true, bollinger: false, macd: false, kd: false }}
-                initialVisibleBars={timeframe === 'M' ? 36 : timeframe === 'W' ? 60 : 120}
+                initialVisibleBars={initialVisibleBars}
                 onLoadMore={handleLoadMoreHistory}
+                syncController={syncController}
+                syncId="market-kline"
               />
             </div>
 
             {/* 2. 使用者特別要求：自訂多空分數走勢圖 (依狀態變色、標示多空門檻) */}
             {(activeTab === 'all' || activeTab === 'score') && (
-              <MarketScoreChart data={activeMarketData} />
+              <MarketScoreChart
+                data={activeMarketData}
+                initialVisibleBars={initialVisibleBars}
+                syncController={syncController}
+                syncId="market-score"
+              />
             )}
 
             {/* 3. 三大法人買賣超柱狀圖 */}
             {(activeTab === 'all' || activeTab === 'inst') && (
-              <MarketInstChart data={activeMarketData} />
+              <MarketInstChart
+                data={activeMarketData}
+                initialVisibleBars={initialVisibleBars}
+                syncController={syncController}
+                syncId="market-inst"
+              />
             )}
 
             {/* 4. 外資台指期未平倉口數走勢圖 */}
             {(activeTab === 'all' || activeTab === 'futures') && (
-              <MarketFuturesChart data={activeMarketData} />
+              <MarketFuturesChart
+                data={activeMarketData}
+                initialVisibleBars={initialVisibleBars}
+                syncController={syncController}
+                syncId="market-futures"
+              />
             )}
 
             {/* 5. 大盤融資融券餘額變化圖 */}
             {(activeTab === 'all' || activeTab === 'margin') && (
-              <MarketMarginBalanceChart data={activeMarketData} />
+              <MarketMarginBalanceChart
+                data={activeMarketData}
+                initialVisibleBars={initialVisibleBars}
+                syncController={syncController}
+                syncId="market-margin"
+              />
             )}
           </div>
         )}
