@@ -437,6 +437,49 @@ export const fetchLatestPicks = async (): Promise<{ symbol: string; [key: string
   }
 };
 
+export interface InstCostRankingItem {
+  date: string;
+  symbol: string;
+  name: string;
+  industry: string;
+  close: number;
+  ratio1d: number;
+  ratio6d: number;
+  ratio12d: number;
+  cost1d: number;
+  cost6d: number;
+  cost12d: number;
+  avgCost6d: number;
+  avgCost12d: number;
+}
+
+export interface InstRankingsResponse {
+  date: string;
+  top1d: InstCostRankingItem[];
+  top6d: InstCostRankingItem[];
+  top12d: InstCostRankingItem[];
+}
+
+export const fetchInstRankings = async (rebuild = false): Promise<InstRankingsResponse> => {
+  try {
+    const url = `https://cloud-stock-chooser.mrmosssir.workers.dev/api/inst-rankings${rebuild ? '?rebuild=1' : ''}`;
+    const response = await fetch(url);
+    const result = await response.json();
+    if (result.success) {
+      return {
+        date: result.date || '',
+        top1d: Array.isArray(result.top1d) ? result.top1d : [],
+        top6d: Array.isArray(result.top6d) ? result.top6d : [],
+        top12d: Array.isArray(result.top12d) ? result.top12d : [],
+      };
+    }
+    return { date: '', top1d: [], top6d: [], top12d: [] };
+  } catch (error) {
+    console.error('Error fetching institutional cost rankings:', error);
+    return { date: '', top1d: [], top6d: [], top12d: [] };
+  }
+};
+
 export interface MarketDailyRecord {
   date: string;
   open: number;
