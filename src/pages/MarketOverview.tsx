@@ -22,17 +22,111 @@ import { MarketScoreChart } from '../components/MarketScoreChart';
 import { MarketInstChart } from '../components/MarketInstChart';
 import { MarketFuturesChart } from '../components/MarketFuturesChart';
 import { MarketMarginBalanceChart } from '../components/MarketMarginBalanceChart';
-import { fetchMarketHistory, fetchMarketLatest } from '../api';
-import type { MarketDailyRecord, StockCandle } from '../api';
+import { fetchMarketHistory, fetchMarketLatest, fetchQuote } from '../api';
+import type { MarketDailyRecord, StockCandle, StockQuote } from '../api';
 import { calculateMarketStrategySignals, type MarketStrategyMode } from '../utils/signals';
 import { aggregateMarketRecords } from '../utils/resample';
 import { calculateMarketSignals } from '../utils/marketEngine';
 import { ChartSyncController } from '../utils/chartSync';
 
+/**
+ * 將加權指數 (t00) 盤中即時報價合併至歷史大盤 K 線陣列，並重算即時技術指標與多空分數
+ */
+function mergeIntradayMarketQuote(
+  records: MarketDailyRecord[],
+  quote: StockQuote | null
+): MarketDailyRecord[] {
+  if (!quote || quote.lastPrice <= 0 || records.length === 0) {
+    return records;
+  }
+
+  const ts = quote.lastUpdated ? new Date(quote.lastUpdated).getTime() : Date.now();
+  const twDate = new Date((Number.isNaN(ts) ? Date.now() : ts) + 8 * 3600 * 1000);
+  const quoteDate = twDate.toISOString().split('T')[0];
+
+  const next = [...records];
+  const lastIdx = next.length - 1;
+  const last = next[lastIdx];
+
+  // TWSE MIS t00 的 item.v 為成交金額(百萬元)，經後端 *1000 後，再 *1000 即為新台幣元
+  const estimatedTradeValue = (quote.volume || 0) * 1000;
+
+  if (last.date === quoteDate) {
+    const prevClose = lastIdx > 0 ? next[lastIdx - 1].close : last.open;
+    const newHigh = Math.max(last.high, quote.high || quote.lastPrice);
+    const newLow = last.low > 0 ? Math.min(last.low, quote.low || quote.lastPrice) : (quote.low || quote.lastPrice);
+    const newChange =
+      quote.change !== undefined && quote.change !== 0
+        ? quote.change
+        : Number((quote.lastPrice - prevClose).toFixed(2));
+
+    if (
+      last.close === quote.lastPrice &&
+      last.high === newHigh &&
+      last.low === newLow &&
+      last.change === newChange
+    ) {
+      return records;
+    }
+
+    const isStillIntraday =
+      Boolean(last.isIntraday) ||
+      (last.foreignNet === 0 && last.trustNet === 0 && last.dealerNet === 0);
+
+    next[lastIdx] = {
+      ...last,
+      open: last.open || quote.open || quote.lastPrice,
+      high: newHigh,
+      low: newLow,
+      close: quote.lastPrice,
+      change: newChange,
+      tradeValue: isStillIntraday && estimatedTradeValue > 0 ? estimatedTradeValue : last.tradeValue,
+      isIntraday: isStillIntraday,
+    };
+    return calculateMarketSignals(next);
+  } else if (last.date < quoteDate) {
+    const newChange =
+      quote.change !== undefined && quote.change !== 0
+        ? quote.change
+        : Number((quote.lastPrice - last.close).toFixed(2));
+
+    const intradayRecord: MarketDailyRecord = {
+      date: quoteDate,
+      open: quote.open || quote.lastPrice,
+      high: quote.high || quote.lastPrice,
+      low: quote.low || quote.lastPrice,
+      close: quote.lastPrice,
+      volume: last.volume || 0,
+      tradeValue: estimatedTradeValue > 0 ? estimatedTradeValue : 0,
+      change: newChange,
+      foreignNet: 0,
+      trustNet: 0,
+      dealerNet: 0,
+      totalInstNet: 0,
+      foreignFuturesOI: last.foreignFuturesOI,
+      marginBalance: last.marginBalance,
+      marginDiff: 0,
+      shortBalance: last.shortBalance,
+      shortDiff: 0,
+      score: last.score,
+      status: last.status,
+      statusText: last.statusText,
+      summary: '',
+      isIntraday: true,
+    };
+
+    next.push(intradayRecord);
+    return calculateMarketSignals(next);
+  }
+
+  return records;
+}
+
 export const MarketOverview = () => {
   const navigate = useNavigate();
   const [historyData, setHistoryData] = useState<MarketDailyRecord[]>([]);
   const [latestData, setLatestData] = useState<MarketDailyRecord | null>(null);
+  const [intradayUpdatedAt, setIntradayUpdatedAt] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<'D' | 'W' | 'M'>('D');
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -45,18 +139,35 @@ export const MarketOverview = () => {
   const hasMoreRef = useRef<boolean>(true);
   const isLoadingMoreRef = useRef<boolean>(false);
 
+  const formatQuoteTime = (isoStr?: string) => {
+    const d = isoStr ? new Date(isoStr) : new Date();
+    const validDate = Number.isNaN(d.getTime()) ? new Date() : d;
+    return validDate.toLocaleTimeString('zh-TW', { hour12: false });
+  };
+
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // 單次 API 預設抓取最近 3 年（約 720 個交易日），確保週線與月線均線結構完整
-      const [history, latest] = await Promise.all([
+      // 單次 API 預設抓取最近 3 年（約 720 個交易日），並同步拉取加權指數 (t00) 盤中即時報價
+      const [history, latest, t00Quote] = await Promise.all([
         fetchMarketHistory(720),
-        fetchMarketLatest()
+        fetchMarketLatest(),
+        fetchQuote('t00').catch(() => null),
       ]);
-      setHistoryData(history);
-      oldestDateRef.current = history.length > 0 ? history[0].date : null;
+      const baseHistory = calculateMarketSignals(history);
+      const mergedHistory = mergeIntradayMarketQuote(baseHistory, t00Quote);
+      setHistoryData(mergedHistory);
+      oldestDateRef.current = mergedHistory.length > 0 ? mergedHistory[0].date : null;
       hasMoreRef.current = history.length >= 720;
-      setLatestData(latest || (history.length > 0 ? history[history.length - 1] : null));
+
+      if (t00Quote && t00Quote.lastPrice > 0) {
+        setIntradayUpdatedAt(formatQuoteTime(t00Quote.lastUpdated));
+      }
+
+      const newestRecord = mergedHistory.length > 0 ? mergedHistory[mergedHistory.length - 1] : null;
+      setLatestData(
+        newestRecord && (!latest || newestRecord.date >= latest.date) ? newestRecord : latest
+      );
     } catch (e) {
       console.error('Failed to load market data:', e);
     } finally {
@@ -66,6 +177,30 @@ export const MarketOverview = () => {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // 盤中每 15 秒自動輪詢加權指數 (t00) 即時報價，動態重算即時分數與買賣訊號
+  useEffect(() => {
+    const intervalId = setInterval(async () => {
+      try {
+        const t00Quote = await fetchQuote('t00');
+        if (!t00Quote || t00Quote.lastPrice <= 0) return;
+
+        setIntradayUpdatedAt(formatQuoteTime(t00Quote.lastUpdated));
+        setHistoryData((prev) => {
+          if (prev.length === 0) return prev;
+          const updated = mergeIntradayMarketQuote(prev, t00Quote);
+          if (updated !== prev && updated.length > 0) {
+            setLatestData(updated[updated.length - 1]);
+          }
+          return updated;
+        });
+      } catch (err) {
+        // 盤後或網路瞬斷時靜默忽略
+      }
+    }, 15000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   // 當使用者在 K 線圖往左滑動超過已載入的邊界時，自動向 API 請求更早的資料
@@ -145,12 +280,19 @@ export const MarketOverview = () => {
 
   const current = useMemo(() => {
     if (timeframe === 'D') {
-      return latestData || (activeMarketData.length > 0 ? activeMarketData[activeMarketData.length - 1] : null);
+      const lastActive = activeMarketData.length > 0 ? activeMarketData[activeMarketData.length - 1] : null;
+      if (lastActive && (!latestData || lastActive.date >= latestData.date)) {
+        return lastActive;
+      }
+      return latestData || lastActive;
     }
     return activeMarketData.length > 0 ? activeMarketData[activeMarketData.length - 1] : null;
   }, [timeframe, latestData, activeMarketData]);
 
   const pos = strategyResult.currentPosition;
+  const isTodaySignalTriggered = Boolean(
+    strategyMode !== 'off' && current && pos.lastSignalDate === current.date
+  );
 
   const getStatusColor = (status?: string) => {
     if (status === 'bull') return 'bg-red-500 text-white';
@@ -222,13 +364,19 @@ export const MarketOverview = () => {
           <div className={`bg-white dark:bg-gray-800 rounded-2xl p-6 border-2 shadow-sm ${getStatusBorder(current.status)}`}>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-gray-700">
               <div className="space-y-1">
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <span className="text-2xl font-black tracking-tight text-gray-900 dark:text-white">
                     發行量加權股價指數 (TAIEX)
                   </span>
                   <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase shadow-xs ${getStatusColor(current.status)}`}>
                     {current.statusText}
                   </span>
+                  {intradayUpdatedAt && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      {current.isIntraday ? '盤中即時試算中' : '即時報價已連線'} ({intradayUpdatedAt})
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-baseline gap-3">
                   <span className="text-3xl font-black text-gray-900 dark:text-white">
@@ -272,12 +420,37 @@ export const MarketOverview = () => {
               </div>
             </div>
 
+            {/* 當期/盤中即時觸發策略訊號橫幅 */}
+            {isTodaySignalTriggered && (
+              <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 text-xs">
+                <div className="flex items-start sm:items-center gap-2">
+                  <Zap size={18} className="text-amber-500 shrink-0 mt-0.5 sm:mt-0" />
+                  <div>
+                    <span className="font-bold text-amber-900 dark:text-amber-200">
+                      {current.isIntraday ? '⚡ 盤中即時觸發波段訊號：' : '🔔 本期觸發波段策略訊號：'}
+                    </span>
+                    <span className="ml-1 px-2 py-0.5 rounded bg-amber-500 text-white font-mono font-bold">
+                      {pos.lastSignalText}
+                    </span>
+                    <span className="ml-2 text-gray-700 dark:text-gray-200 font-medium">
+                      {pos.lastSignalReason}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-amber-800 dark:text-amber-300 font-bold shrink-0">
+                  建議目標：{pos.tierName} ({pos.allocationText})
+                </div>
+              </div>
+            )}
+
             {/* 關鍵訊號摘要卡 */}
             {current.summary && (
               <div className="mt-4 flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300 bg-blue-50/60 dark:bg-blue-950/20 p-3 rounded-xl border border-blue-100 dark:border-blue-900/40">
                 <ShieldAlert size={16} className="text-blue-500 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold text-blue-900 dark:text-blue-300">盤後多因子訊號診斷：</span>
+                  <span className="font-semibold text-blue-900 dark:text-blue-300">
+                    {current.isIntraday ? '⚡ 盤中即時多因子訊號診斷：' : '盤後多因子訊號診斷：'}
+                  </span>
                   {current.summary}
                 </div>
               </div>

@@ -204,6 +204,7 @@ export function aggregateMarketRecords(
       status: 'consolidation',
       statusText: '區間震盪',
       summary: '',
+      isIntraday: last.isIntraday,
     });
   }
 

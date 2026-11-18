@@ -510,6 +510,7 @@ export interface MarketDailyRecord {
   status: 'bull' | 'consolidation' | 'bear';
   statusText: string;
   summary?: string;
+  isIntraday?: boolean;
 }
 
 export const normalizeMarketRecord = (raw: any): MarketDailyRecord => ({
