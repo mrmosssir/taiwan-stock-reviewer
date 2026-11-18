@@ -22,8 +22,9 @@ import { MarketScoreChart } from '../components/MarketScoreChart';
 import { MarketInstChart } from '../components/MarketInstChart';
 import { MarketFuturesChart } from '../components/MarketFuturesChart';
 import { MarketMarginBalanceChart } from '../components/MarketMarginBalanceChart';
-import { fetchMarketHistory, fetchMarketLatest, fetchQuote } from '../api';
-import type { MarketDailyRecord, StockCandle, StockQuote } from '../api';
+import { MarketSectorFlow } from '../components/MarketSectorFlow';
+import { fetchMarketHistory, fetchMarketLatest, fetchQuote, fetchSectorFlow } from '../api';
+import type { MarketDailyRecord, StockCandle, StockQuote, SectorFlowItem } from '../api';
 import { calculateMarketStrategySignals, type MarketStrategyMode } from '../utils/signals';
 import { aggregateMarketRecords } from '../utils/resample';
 import { calculateMarketSignals } from '../utils/marketEngine';
@@ -130,7 +131,10 @@ export const MarketOverview = () => {
   const [timeframe, setTimeframe] = useState<'D' | 'W' | 'M'>('D');
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'score' | 'inst' | 'futures' | 'margin'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'score' | 'inst' | 'futures' | 'margin' | 'sector'>('all');
+  const [sectorFlowDate, setSectorFlowDate] = useState<string>('');
+  const [sectorFlowList, setSectorFlowList] = useState<SectorFlowItem[]>([]);
+  const [isSectorLoading, setIsSectorLoading] = useState<boolean>(false);
   const [strategyMode, setStrategyMode] = useState<MarketStrategyMode>('advanced_3x');
   const [showLogicModal, setShowLogicModal] = useState(false);
   const [showAllocationModal, setShowAllocationModal] = useState(false);
@@ -145,8 +149,22 @@ export const MarketOverview = () => {
     return validDate.toLocaleTimeString('zh-TW', { hour12: false });
   };
 
+  const loadSectorFlowData = useCallback(async (rebuild = false) => {
+    setIsSectorLoading(true);
+    try {
+      const res = await fetchSectorFlow(rebuild);
+      setSectorFlowDate(res.date);
+      setSectorFlowList(res.sectors);
+    } catch (e) {
+      console.error('Failed to load sector money flow:', e);
+    } finally {
+      setIsSectorLoading(false);
+    }
+  }, []);
+
   const loadData = async () => {
     setIsLoading(true);
+    loadSectorFlowData(false);
     try {
       // 單次 API 預設抓取最近 3 年（約 720 個交易日），並同步拉取加權指數 (t00) 盤中即時報價
       const [history, latest, t00Quote] = await Promise.all([
@@ -565,6 +583,16 @@ export const MarketOverview = () => {
             >
               👥 融資融券
             </button>
+            <button
+              onClick={() => setActiveTab('sector')}
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+                activeTab === 'sector'
+                  ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 font-bold shadow-xs'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              💰 族群資金流向
+            </button>
           </div>
 
           {/* K 線視野與動態歷史載入狀態 */}
@@ -754,6 +782,16 @@ export const MarketOverview = () => {
                 initialVisibleBars={initialVisibleBars}
                 syncController={syncController}
                 syncId="market-margin"
+              />
+            )}
+
+            {/* 6. 大盤族群資金流向佔比與流入/流出排行 */}
+            {(activeTab === 'all' || activeTab === 'sector') && (
+              <MarketSectorFlow
+                date={sectorFlowDate}
+                sectors={sectorFlowList}
+                isLoading={isSectorLoading}
+                onRefresh={loadSectorFlowData}
               />
             )}
           </div>

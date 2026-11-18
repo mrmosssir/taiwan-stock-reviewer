@@ -480,6 +480,56 @@ export const fetchInstRankings = async (rebuild = false): Promise<InstRankingsRe
   }
 };
 
+export interface SectorStockRepresentative {
+  symbol: string;
+  name: string;
+  close: number;
+  changePct: number;
+  turnover: number;
+  instNetAmount: number;
+}
+
+export interface SectorFlowItem {
+  date: string;
+  industry: string;
+  stockCount: number;
+  upCount: number;
+  downCount: number;
+  avgChangePct: number;
+  turnover: number;
+  turnoverRatio: number;
+  ratioDiff1d: number;
+  ratioDiff5d: number;
+  instNetAmount: number;
+  foreignNetAmount: number;
+  trustNetAmount: number;
+  topInflowStocks: SectorStockRepresentative[];
+  topOutflowStocks: SectorStockRepresentative[];
+}
+
+export interface SectorFlowResponse {
+  date: string;
+  sectors: SectorFlowItem[];
+}
+
+export const fetchSectorFlow = async (rebuild = false): Promise<SectorFlowResponse> => {
+  try {
+    const url = `https://cloud-stock-chooser.mrmosssir.workers.dev/api/sector-flow${rebuild ? '?rebuild=1' : ''}`;
+    const response = await fetch(url);
+    const result = await response.json();
+    if (result.success && Array.isArray(result.sectors)) {
+      return {
+        date: result.date || '',
+        sectors: result.sectors,
+      };
+    }
+    return { date: '', sectors: [] };
+  } catch (error) {
+    console.error('Error fetching sector money flow:', error);
+    return { date: '', sectors: [] };
+  }
+};
+
 export interface MarketDailyRecord {
   date: string;
   open: number;
