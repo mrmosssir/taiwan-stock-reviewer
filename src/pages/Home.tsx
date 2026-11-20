@@ -18,6 +18,10 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { useWatchlist } from '../context/WatchlistContext';
 import { fetchLatestPicks, fetchInstRankings, fetchTickers, fetchQuotes } from '../api';
 import type { StockTicker, StockQuote, InstRankingsResponse, InstCostRankingItem } from '../api';
+import {
+  getTaiwanMarketSession,
+  verifyQuoteIsTodayOrLockHoliday,
+} from '../utils/tradingHours';
 import clsx from 'clsx';
 
 export const Home = () => {
@@ -126,6 +130,10 @@ export const Home = () => {
       ]);
       setTickersMap(prev => ({ ...prev, ...newTickers }));
       setQuotesMap(prev => ({ ...prev, ...newQuotes }));
+      const firstQuote = Object.values(newQuotes)[0];
+      if (firstQuote) {
+        verifyQuoteIsTodayOrLockHoliday(firstQuote.lastUpdated);
+      }
     } catch (e) {
       console.error('Batch fetch error:', e);
     } finally {
@@ -136,7 +144,10 @@ export const Home = () => {
   useEffect(() => {
     loadBatchData(currentStocks);
 
+    // 僅於開盤日盤中 (09:00 ~ 13:35) 才每 30 秒自動輪詢；收盤後、16:00後、週末與國定假日停止背景輪詢
     const interval = setInterval(() => {
+      const sessionInfo = getTaiwanMarketSession();
+      if (!sessionInfo.shouldPollRealtime) return;
       loadBatchData(currentStocks);
     }, 30000);
 

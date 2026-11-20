@@ -29,6 +29,10 @@ import { calculateMarketStrategySignals, type MarketStrategyMode } from '../util
 import { aggregateMarketRecords } from '../utils/resample';
 import { calculateMarketSignals } from '../utils/marketEngine';
 import { ChartSyncController } from '../utils/chartSync';
+import {
+  getTaiwanMarketSession,
+  verifyQuoteIsTodayOrLockHoliday,
+} from '../utils/tradingHours';
 
 /**
  * 將加權指數 (t00) 盤中即時報價合併至歷史大盤 K 線陣列，並重算即時技術指標與多空分數
@@ -166,20 +170,47 @@ export const MarketOverview = () => {
     setIsLoading(true);
     loadSectorFlowData(false);
     try {
-      // 單次 API 預設抓取最近 3 年（約 720 個交易日），並同步拉取加權指數 (t00) 盤中即時報價
-      const [history, latest, t00Quote] = await Promise.all([
+      const sessionInfo = getTaiwanMarketSession();
+
+      // 先抓取資料庫已結算的大盤歷史與最新紀錄
+      const [history, latest] = await Promise.all([
         fetchMarketHistory(720),
         fetchMarketLatest(),
-        fetchQuote('t00').catch(() => null),
       ]);
       const baseHistory = calculateMarketSignals(history);
-      const mergedHistory = mergeIntradayMarketQuote(baseHistory, t00Quote);
+      const lastDbRecord =
+        baseHistory.length > 0 ? baseHistory[baseHistory.length - 1] : null;
+
+      // 判斷資料庫是否已經有今日 (todayStr) 的正式盤後結算資料
+      const hasTodaySettledInDb = Boolean(
+        lastDbRecord &&
+          lastDbRecord.date === sessionInfo.todayStr &&
+          (lastDbRecord.foreignNet !== 0 || lastDbRecord.foreignFuturesOI !== 0)
+      );
+
+      // 只有在「平日 09:00 ~ 15:59 (盤中或 16:00 入庫前)」且「資料庫尚無今日盤後結算資料」時，才去打即時報價 API！
+      // 週六日、國定假日、早上 09:00 前、以及下午 16:00 之後，皆完全不打 fetchQuote('t00')
+      let t00Quote: StockQuote | null = null;
+      if (sessionInfo.shouldFetchMarketInitialQuote && !hasTodaySettledInDb) {
+        t00Quote = await fetchQuote('t00').catch(() => null);
+        // 若平日盤中回傳的報價日期仍停留在過去日期，代表今日為國定假日或颱風假休市，自動鎖定休市
+        if (t00Quote && !verifyQuoteIsTodayOrLockHoliday(t00Quote.lastUpdated)) {
+          t00Quote = null;
+        }
+      }
+
+      const mergedHistory = t00Quote
+        ? mergeIntradayMarketQuote(baseHistory, t00Quote)
+        : baseHistory;
+
       setHistoryData(mergedHistory);
       oldestDateRef.current = mergedHistory.length > 0 ? mergedHistory[0].date : null;
       hasMoreRef.current = history.length >= 720;
 
       if (t00Quote && t00Quote.lastPrice > 0) {
         setIntradayUpdatedAt(formatQuoteTime(t00Quote.lastUpdated));
+      } else {
+        setIntradayUpdatedAt(null);
       }
 
       const newestRecord = mergedHistory.length > 0 ? mergedHistory[mergedHistory.length - 1] : null;
@@ -197,16 +228,37 @@ export const MarketOverview = () => {
     loadData();
   }, []);
 
-  // 盤中每 15 秒自動輪詢加權指數 (t00) 即時報價，動態重算即時分數與買賣訊號
+  // 僅在「開盤日盤中 (週一至週五 09:00 ~ 13:35，非國定假日)」每 15 秒輪詢加權指數 (t00)；
+  // 收盤後 (13:36 起)、下午 16:00 後、週末六日與國定假日皆完全不發送輪詢請求
   useEffect(() => {
     const intervalId = setInterval(async () => {
+      const sessionInfo = getTaiwanMarketSession();
+      if (!sessionInfo.shouldPollRealtime) {
+        return;
+      }
+
       try {
         const t00Quote = await fetchQuote('t00');
         if (!t00Quote || t00Quote.lastPrice <= 0) return;
 
+        // 若證交所回傳報價日期並非今日，代表今日為國定假日/颱風假休市，自動鎖定休市並停止後續輪詢
+        if (!verifyQuoteIsTodayOrLockHoliday(t00Quote.lastUpdated)) {
+          setIntradayUpdatedAt(null);
+          return;
+        }
+
         setIntradayUpdatedAt(formatQuoteTime(t00Quote.lastUpdated));
         setHistoryData((prev) => {
           if (prev.length === 0) return prev;
+          const last = prev[prev.length - 1];
+          // 若資料庫已經有今日盤後籌碼，不再以即時報價覆蓋
+          if (
+            last.date === sessionInfo.todayStr &&
+            !last.isIntraday &&
+            (last.foreignNet !== 0 || last.foreignFuturesOI !== 0)
+          ) {
+            return prev;
+          }
           const updated = mergeIntradayMarketQuote(prev, t00Quote);
           if (updated !== prev && updated.length > 0) {
             setLatestData(updated[updated.length - 1]);
@@ -214,7 +266,7 @@ export const MarketOverview = () => {
           return updated;
         });
       } catch (err) {
-        // 盤後或網路瞬斷時靜默忽略
+        // 網路瞬斷時靜默忽略
       }
     }, 15000);
 

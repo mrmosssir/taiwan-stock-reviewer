@@ -25,6 +25,10 @@ import { calculateSignals, SIGNAL_STRATEGIES } from '../utils/signals';
 import { aggregateCandles, aggregateInstitutional } from '../utils/resample';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useWatchlist } from '../context/WatchlistContext';
+import {
+  getTaiwanMarketSession,
+  verifyQuoteIsTodayOrLockHoliday,
+} from '../utils/tradingHours';
 
 const WatchlistDropdown = ({ symbol }: { symbol: string }) => {
   const { folders, getFoldersContainingStock, addStockToFolder, removeStockFromFolder } = useWatchlist();
@@ -163,14 +167,20 @@ export const StockDetail: React.FC = () => {
     }
   };
 
-  // 盤中即時更新 (每 15 秒輪詢一次)
+  // 盤中即時更新 (僅於開盤日 09:00 ~ 13:35 每 15 秒輪詢一次；收盤後、16:00後、週六日與國定假日不輪詢)
   useEffect(() => {
     if (!symbol) return;
 
     const intervalId = setInterval(async () => {
+      const sessionInfo = getTaiwanMarketSession();
+      if (!sessionInfo.shouldPollRealtime) {
+        return;
+      }
+
       try {
         const quoteData = await fetchQuote(symbol);
         if (!quoteData || quoteData.lastPrice <= 0) return;
+        if (!verifyQuoteIsTodayOrLockHoliday(quoteData.lastUpdated)) return;
 
         const d = quoteData.lastUpdated ? new Date(quoteData.lastUpdated) : new Date();
         const quoteDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -239,8 +249,9 @@ export const StockDetail: React.FC = () => {
 
         let finalCandles = [...candlesData];
         
-        // 初始載入時，整合即時報價至 K 線
+        // 初始載入時，僅在當日尚無完整歷史 K 線或處於 16:00 前時整合即時報價至 K 線
         if (quoteData && quoteData.lastPrice > 0) {
+          verifyQuoteIsTodayOrLockHoliday(quoteData.lastUpdated);
           const d = quoteData.lastUpdated ? new Date(quoteData.lastUpdated) : new Date();
           const quoteDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
           
