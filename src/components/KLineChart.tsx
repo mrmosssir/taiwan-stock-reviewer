@@ -26,6 +26,7 @@ interface KLineChartProps {
   initialVisibleBars?: number;
   syncController?: ChartSyncController;
   syncId?: string;
+  volumeMode?: 'shares' | 'value';
 }
 
 interface BarIndicatorSnapshot {
@@ -56,8 +57,14 @@ const formatNum = (val?: number) => {
     : val.toFixed(2);
 };
 
-const formatVol = (vol: number) => {
+const formatVol = (vol: number, mode: 'shares' | 'value' = 'shares') => {
   if (!vol) return '0';
+  if (mode === 'value') {
+    if (vol >= 1e12) return `${(vol / 1e12).toFixed(2)}兆`;
+    if (vol >= 1e8) return `${(vol / 1e8).toLocaleString(undefined, { maximumFractionDigits: 1 })}億`;
+    if (vol >= 1e4) return `${Math.round(vol / 1e4).toLocaleString()}萬`;
+    return `${vol.toLocaleString()}元`;
+  }
   if (vol >= 1e8) return `${(vol / 1e8).toFixed(1)}億`;
   if (vol >= 1000) return `${Math.round(vol / 1000).toLocaleString()}張`;
   return vol.toLocaleString();
@@ -72,6 +79,7 @@ export const KLineChart: React.FC<KLineChartProps> = ({
   initialVisibleBars,
   syncController,
   syncId = 'kline',
+  volumeMode = 'shares',
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -580,7 +588,8 @@ export const KLineChart: React.FC<KLineChartProps> = ({
               {activeSnap.changePct.toFixed(2)}%)
             </span>
             <span className="text-gray-500 dark:text-gray-400">
-              量 <strong className="text-gray-700 dark:text-gray-300">{formatVol(activeSnap.volume)}</strong>
+              {volumeMode === 'value' ? '額' : '量'}{' '}
+              <strong className="text-gray-700 dark:text-gray-300">{formatVol(activeSnap.volume, volumeMode)}</strong>
             </span>
           </div>
 

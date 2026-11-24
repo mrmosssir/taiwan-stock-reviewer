@@ -65,18 +65,21 @@ function mergeIntradayMarketQuote(
         ? quote.change
         : Number((quote.lastPrice - prevClose).toFixed(2));
 
+    const isStillIntraday =
+      Boolean(last.isIntraday) ||
+      (last.foreignNet === 0 && last.trustNet === 0 && last.dealerNet === 0);
+    const newTradeValue =
+      isStillIntraday && estimatedTradeValue > 0 ? estimatedTradeValue : last.tradeValue;
+
     if (
       last.close === quote.lastPrice &&
       last.high === newHigh &&
       last.low === newLow &&
-      last.change === newChange
+      last.change === newChange &&
+      last.tradeValue === newTradeValue
     ) {
       return records;
     }
-
-    const isStillIntraday =
-      Boolean(last.isIntraday) ||
-      (last.foreignNet === 0 && last.trustNet === 0 && last.dealerNet === 0);
 
     next[lastIdx] = {
       ...last,
@@ -85,7 +88,7 @@ function mergeIntradayMarketQuote(
       low: newLow,
       close: quote.lastPrice,
       change: newChange,
-      tradeValue: isStillIntraday && estimatedTradeValue > 0 ? estimatedTradeValue : last.tradeValue,
+      tradeValue: newTradeValue,
       isIntraday: isStillIntraday,
     };
     return calculateMarketSignals(next);
@@ -101,7 +104,7 @@ function mergeIntradayMarketQuote(
       high: quote.high || quote.lastPrice,
       low: quote.low || quote.lastPrice,
       close: quote.lastPrice,
-      volume: last.volume || 0,
+      volume: 0,
       tradeValue: estimatedTradeValue > 0 ? estimatedTradeValue : 0,
       change: newChange,
       foreignNet: 0,
@@ -334,7 +337,7 @@ export const MarketOverview = () => {
     return strategyResult.markers.filter((m) => String(m.time) >= startDate);
   }, [strategyResult.markers, activeMarketData, strategyMode]);
 
-  // 將大盤資料轉換為 KLineChart 所需的 StockCandle 格式
+  // 將大盤資料轉換為 KLineChart 所需的 StockCandle 格式（大盤量能以成交金額 tradeValue 呈現）
   const candles: StockCandle[] = useMemo(
     () =>
       activeMarketData.map((d) => ({
@@ -343,7 +346,7 @@ export const MarketOverview = () => {
         high: d.high,
         low: d.low,
         close: d.close,
-        volume: d.volume,
+        volume: d.tradeValue,
       })),
     [activeMarketData]
   );
@@ -794,6 +797,7 @@ export const MarketOverview = () => {
                 onLoadMore={handleLoadMoreHistory}
                 syncController={syncController}
                 syncId="market-kline"
+                volumeMode="value"
               />
             </div>
 
