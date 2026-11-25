@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
   fetchTicker, 
-  fetchHistoricalCandles, 
-  fetchInstitutionalInvestors,
+  fetchStockHistoryFull,
   fetchMarginTrading,
   fetchFinancialStatements,
   fetchQuote,
@@ -134,38 +133,12 @@ export const StockDetail: React.FC = () => {
 
   const [finTab, setFinTab] = useState<'profit' | 'revenue' | 'strength' | 'cash'>('profit');
 
-  const oldestDateRef = useRef<string | null>(null);
-
-  // Calculate signals
+  // Calculate signals (完整歷史資料直接計算，確保狀態機與後端完全對齊)
   const markers = useMemo(() => {
     return calculateSignals(activeStrategy, displayCandles, displayInstitutional, ticker, financials);
   }, [activeStrategy, displayCandles, displayInstitutional, ticker, financials]);
 
-  useEffect(() => {
-    if (rawCandles.length > 0) {
-      oldestDateRef.current = rawCandles[0].date;
-    }
-  }, [rawCandles]);
-
-  const loadMoreData = async () => {
-    if (!symbol || loading || !oldestDateRef.current) return;
-    const oldestDate = new Date(oldestDateRef.current);
-    oldestDate.setDate(oldestDate.getDate() - 1);
-    const newTo = oldestDate.toISOString().split('T')[0];
-    try {
-      const loadDays = timeframe === 'M' ? 730 : 360;
-      const newCandles = await fetchHistoricalCandles(symbol, timeframe, loadDays, newTo);
-      if (newCandles.length > 0) {
-        setRawCandles(current => {
-          const combined = [...newCandles, ...current];
-          const unique = Array.from(new Map(combined.map(item => [item.date, item])).values());
-          return unique.sort((a, b) => a.date.localeCompare(b.date));
-        });
-      }
-    } catch (error) {
-      console.error('Error loading more history:', error);
-    }
-  };
+  const initialVisibleBars = timeframe === 'M' ? 36 : timeframe === 'W' ? 60 : 120;
 
   // 盤中即時更新 (僅於開盤日 09:00 ~ 13:35 每 15 秒輪詢一次；收盤後、16:00後、週六日與國定假日不輪詢)
   useEffect(() => {
@@ -236,18 +209,16 @@ export const StockDetail: React.FC = () => {
       if (!symbol) return;
       setLoading(true);
       try {
-        const daysToFetch = timeframe === 'M' ? 1800 : timeframe === 'W' ? 730 : 360;
-        const [tickerData, candlesData, instData, marginData, finData, quoteData, divs] = await Promise.all([
+        const [tickerData, historyData, marginData, finData, quoteData, divs] = await Promise.all([
           fetchTicker(symbol),
-          fetchHistoricalCandles(symbol, timeframe, daysToFetch),
-          fetchInstitutionalInvestors(symbol, daysToFetch),
-          fetchMarginTrading(symbol, daysToFetch),
+          fetchStockHistoryFull(symbol),
+          fetchMarginTrading(symbol, 360),
           fetchFinancialStatements(symbol),
           fetchQuote(symbol).catch(() => null),
           fetchDividends(symbol, 3600)
         ]);
 
-        let finalCandles = [...candlesData];
+        let finalCandles = [...historyData.candles];
         
         // 初始載入時，僅在當日尚無完整歷史 K 線或處於 16:00 前時整合即時報價至 K 線
         if (quoteData && quoteData.lastPrice > 0) {
@@ -278,7 +249,7 @@ export const StockDetail: React.FC = () => {
         setTicker(tickerData);
         setRawCandles(finalCandles);
         setDividends(divs);
-        setInstitutional(instData);
+        setInstitutional(historyData.institutional);
         setMargin(marginData);
         setFinancials(finData as ComprehensiveFinancials);
       } catch (error) {
@@ -288,7 +259,7 @@ export const StockDetail: React.FC = () => {
       }
     };
     loadAllData();
-  }, [symbol, timeframe]);
+  }, [symbol]);
 
   if (loading && !ticker && rawCandles.length === 0) return <div className="p-8 flex justify-center"><div className="animate-spin text-blue-600 h-8 w-8 border-4 border-t-transparent rounded-full"></div></div>;
 
@@ -369,7 +340,7 @@ export const StockDetail: React.FC = () => {
              data={displayCandles} 
              indicators={indicators} 
              markers={markers} 
-             onLoadMore={loadMoreData} 
+             initialVisibleBars={initialVisibleBars}
              isDarkMode={isDarkMode} 
            />
         </div>

@@ -122,6 +122,40 @@ export const fetchHistoricalCandles = async (
   }
 };
 
+export const fetchStockHistoryFull = async (
+  symbol: string
+): Promise<{ candles: StockCandle[]; institutional: InstitutionalData[] }> => {
+  try {
+    const response = await axios.get(`${CLOUD_API_URL}?id=${symbol}`);
+    const rawData = response.data?.data;
+    if (!Array.isArray(rawData) || rawData.length === 0) {
+      return { candles: [], institutional: [] };
+    }
+
+    const candles: StockCandle[] = rawData.map((item: any) => ({
+      date: item.date,
+      open: item.open,
+      high: item.high,
+      low: item.low,
+      close: item.close,
+      volume: item.volume,
+    }));
+
+    const institutional: InstitutionalData[] = rawData.map((item: any) => ({
+      date: item.date,
+      net: (item.netForeign || 0) + (item.netTrust || 0) + (item.netDealer || 0),
+      netForeign: item.netForeign || 0,
+      netTrust: item.netTrust || 0,
+      netDealer: item.netDealer || 0,
+    }));
+
+    return { candles, institutional };
+  } catch (error) {
+    console.error(`Error fetching full stock history for ${symbol}:`, error);
+    return { candles: [], institutional: [] };
+  }
+};
+
 export const fetchTicker = async (symbol: string): Promise<StockTicker> => {
   try {
     const fetchUrl = `https://cloud-stock-chooser.mrmosssir.workers.dev/api/stock-info?id=${symbol}`;
@@ -135,7 +169,7 @@ export const fetchTicker = async (symbol: string): Promise<StockTicker> => {
       name: data.name,
       type: data.type || 'EQUITY',
       exchange: data.exchange || '',
-      market: '',
+      market: data.type === 'tpex' ? 'OTC' : data.type === 'twse' ? 'TSE' : '',
       issuedShares: data.issuedShares ? Number(data.issuedShares) : 0,
     };
   } catch (e) {
@@ -166,7 +200,7 @@ export const fetchTickers = async (symbols: string[]): Promise<Record<string, St
           name: item.name,
           type: item.type || 'EQUITY',
           exchange: item.exchange || '',
-          market: '',
+          market: item.type === 'tpex' ? 'OTC' : item.type === 'twse' ? 'TSE' : '',
           issuedShares: item.issuedShares ? Number(item.issuedShares) : 0,
         };
       });
