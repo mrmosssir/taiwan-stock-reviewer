@@ -192,13 +192,16 @@ export const KLineChart: React.FC<KLineChartProps> = ({
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
+    const getResponsiveHeight = (width: number) => (width < 640 ? 310 : 440);
+    const initialWidth = chartContainerRef.current.clientWidth;
+
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: isDarkMode ? '#9ca3af' : '#64748b',
       },
-      width: chartContainerRef.current.clientWidth,
-      height: 440,
+      width: initialWidth,
+      height: getResponsiveHeight(initialWidth),
       grid: {
         vertLines: { color: isDarkMode ? '#1f2937' : '#f1f5f9' },
         horzLines: { color: isDarkMode ? '#1f2937' : '#f1f5f9' },
@@ -274,7 +277,8 @@ export const KLineChart: React.FC<KLineChartProps> = ({
 
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+        const w = chartContainerRef.current.clientWidth;
+        chartRef.current.applyOptions({ width: w, height: getResponsiveHeight(w) });
       }
     };
 
@@ -521,8 +525,10 @@ export const KLineChart: React.FC<KLineChartProps> = ({
           chart.timeScale().setVisibleLogicalRange(syncedRange);
           hasInitializedRangeRef.current = true;
         } else if (initialVisibleBars && data.length > initialVisibleBars) {
+          const isNarrow = (chartContainerRef.current?.clientWidth || 1024) < 640;
+          const effectiveBars = isNarrow ? Math.min(initialVisibleBars, 55) : initialVisibleBars;
           const targetRange = {
-            from: data.length - initialVisibleBars,
+            from: data.length - effectiveBars,
             to: data.length - 1,
           };
           chart.timeScale().setVisibleLogicalRange(targetRange);
@@ -563,9 +569,9 @@ export const KLineChart: React.FC<KLineChartProps> = ({
     <div className="w-full flex flex-col">
       {/* 頂部彩色動態指標與行情資訊列 */}
       {activeSnap && (
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-2 py-1.5 mb-1 rounded-lg bg-gray-50/90 dark:bg-gray-900/60 border border-gray-100 dark:border-gray-700/60 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 sm:gap-x-4 gap-y-1 sm:gap-y-1.5 px-2 py-1.5 mb-1 rounded-lg bg-gray-50/90 dark:bg-gray-900/60 border border-gray-100 dark:border-gray-700/60 text-[11px] sm:text-xs">
           {/* 開高低收與漲跌 */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-0.5 sm:gap-y-1">
             <span className="font-semibold text-gray-600 dark:text-gray-300">{activeSnap.date}</span>
             <span className="text-gray-500 dark:text-gray-400">
               開 <strong className="text-gray-800 dark:text-gray-200">{formatNum(activeSnap.open)}</strong>

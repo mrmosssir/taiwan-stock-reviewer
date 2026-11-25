@@ -73,12 +73,12 @@ export const StockRow: React.FC<StockRowProps> = ({
       : null;
 
   return (
-    <div className="group flex flex-wrap items-center justify-between gap-3 p-4 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 transition-colors">
-      <Link to={`/stock/${symbol}`} className="flex items-center gap-3 flex-1 min-w-[200px] hover:opacity-80 transition-opacity">
+    <div className="group flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-3.5 sm:p-4 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 transition-colors">
+      <Link to={`/stock/${symbol}`} className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity">
         {rank !== undefined && (
           <span
             className={cn(
-              'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
+              'w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
               rank === 1 && 'bg-amber-400 text-amber-950 shadow-xs',
               rank === 2 && 'bg-gray-300 text-gray-800 dark:bg-gray-600 dark:text-gray-100',
               rank === 3 && 'bg-amber-700/80 text-white',
@@ -89,18 +89,18 @@ export const StockRow: React.FC<StockRowProps> = ({
           </span>
         )}
 
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-gray-900 dark:text-white">{symbol}</span>
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{displayName}</span>
+        <div className="flex flex-col min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <span className="font-bold text-gray-900 dark:text-white shrink-0">{symbol}</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">{displayName}</span>
           </div>
-          <span className="text-xs text-gray-400 dark:text-gray-500">{displaySub}</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 truncate">{displaySub}</span>
         </div>
       </Link>
 
       {/* 外資 + 投信 1 / 6 / 12 日投入成本佔總市值比與推估成本價 */}
       {instRanking && (
-        <div className="flex flex-col items-end gap-1 text-xs">
+        <div className="order-last sm:order-none w-full sm:w-auto flex flex-col items-start sm:items-end gap-1 text-xs pt-1 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-gray-700/60">
           <div className="flex flex-wrap items-center gap-1.5">
             <span
               className={cn(
@@ -151,10 +151,10 @@ export const StockRow: React.FC<StockRowProps> = ({
         </div>
       )}
 
-      <div className="flex items-center gap-6">
-        <div className="flex flex-col items-end min-w-[85px]">
+      <div className="flex items-center gap-2 sm:gap-5 shrink-0">
+        <div className="flex flex-col items-end min-w-[76px] sm:min-w-[85px]">
           <span className={cn(
-            "text-lg font-semibold",
+            "text-base sm:text-lg font-semibold",
             isUp && "text-red-600 dark:text-red-400",
             isDown && "text-green-600 dark:text-green-400",
             !isUp && !isDown && "text-gray-900 dark:text-white"
@@ -162,13 +162,13 @@ export const StockRow: React.FC<StockRowProps> = ({
             {displayPrice !== undefined ? displayPrice.toFixed(2) : '-'}
           </span>
           <div className={cn(
-            "flex items-center text-xs font-medium",
+            "flex items-center text-[11px] sm:text-xs font-medium whitespace-nowrap",
             isUp && "text-red-600 dark:text-red-400",
             isDown && "text-green-600 dark:text-green-400",
             !isUp && !isDown && "text-gray-500 dark:text-gray-400"
           )}>
-            {isUp && <TrendingUp size={12} className="mr-1" />}
-            {isDown && <TrendingDown size={12} className="mr-1" />}
+            {isUp && <TrendingUp size={12} className="mr-0.5 sm:mr-1 shrink-0" />}
+            {isDown && <TrendingDown size={12} className="mr-0.5 sm:mr-1 shrink-0" />}
             <span>
               {quote ? (
                 <>
@@ -180,14 +180,14 @@ export const StockRow: React.FC<StockRowProps> = ({
         </div>
 
         {!readOnly && (
-          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
             {onRemove && (
               <button
                 onClick={() => onRemove(symbol)}
                 className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-all"
                 title="刪除"
               >
-                <Trash2 size={18} />
+                <Trash2 size={17} />
               </button>
             )}
           </div>

@@ -183,10 +183,10 @@ export const Home = () => {
         </div>
       </nav>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <header className="mb-8">
-          <h2 className="text-2xl font-bold mb-2">我的台股觀察名單</h2>
-          <p className="text-gray-500 dark:text-gray-400">串接即時行情 API，追蹤自選股與全市場法人重倉動態</p>
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-5 sm:py-8">
+        <header className="mb-5 sm:mb-8">
+          <h2 className="text-xl sm:text-2xl font-bold mb-1 sm:mb-2">我的台股觀察名單</h2>
+          <p className="text-xs sm:text-base text-gray-500 dark:text-gray-400">串接即時行情 API，追蹤自選股與全市場法人重倉動態</p>
         </header>
 
         {/* 資料夾分頁區 */}
@@ -194,7 +194,7 @@ export const Home = () => {
           <button
             onClick={() => setActiveFolderId('daily_picks')}
             className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors",
+              "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap shrink-0 transition-colors",
               isDailyPicks
                 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                 : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
@@ -207,7 +207,7 @@ export const Home = () => {
           <button
             onClick={() => setActiveFolderId('inst_rankings')}
             className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors",
+              "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap shrink-0 transition-colors",
               isInstRankings
                 ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50"
                 : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
@@ -217,40 +217,46 @@ export const Home = () => {
             外投成本排行 (Top 10)
           </button>
 
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-700 mx-1"></div>
+          <div className="w-px h-6 bg-gray-300 dark:bg-gray-700 mx-1 shrink-0"></div>
           
-          {folders.map(folder => (
-            <div key={folder.id} className="relative group flex items-center">
-              <button
-                onClick={() => setActiveFolderId(folder.id)}
+          {folders.map(folder => {
+            const isActive = activeFolderId === folder.id;
+            return (
+              <div
+                key={folder.id}
                 className={clsx(
-                  "px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors border",
-                  activeFolderId === folder.id
+                  "group flex items-center rounded-lg border shrink-0 transition-colors",
+                  isActive
                     ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50"
                     : "bg-white text-gray-600 border-gray-200 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-700"
                 )}
               >
-                {folder.name}
-              </button>
-              
-              {activeFolderId === folder.id && (
-                <div className="absolute right-0 flex items-center gap-1 pr-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-l from-blue-50 via-blue-50 to-transparent dark:from-blue-900/30 dark:via-blue-900/30 pl-4 py-1 rounded-r-lg">
-                  <button onClick={() => handleRename(folder.id, folder.name)} className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" title="重新命名">
-                    <Edit2 size={14} />
-                  </button>
-                  {folders.length > 1 && (
-                    <button onClick={() => handleDelete(folder.id)} className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300" title="刪除">
-                      <Trash2 size={14} />
+                <button
+                  onClick={() => setActiveFolderId(folder.id)}
+                  className="px-3 sm:px-4 py-2 text-sm font-medium whitespace-nowrap"
+                >
+                  {folder.name}
+                </button>
+                
+                {isActive && (
+                  <div className="flex items-center gap-0.5 pr-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => handleRename(folder.id, folder.name)} className="p-1.5 sm:p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" title="重新命名">
+                      <Edit2 size={14} />
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                    {folders.length > 1 && (
+                      <button onClick={() => handleDelete(folder.id)} className="p-1.5 sm:p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300" title="刪除">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
           
           <button
             onClick={handleCreateFolder}
-            className="flex items-center gap-1 px-3 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-white dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-gray-400 dark:hover:border-gray-500 transition-colors ml-2"
+            className="flex items-center gap-1 px-3 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-white dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-gray-400 dark:hover:border-gray-500 transition-colors ml-1 shrink-0"
           >
             <FolderPlus size={16} />
           </button>
@@ -258,7 +264,7 @@ export const Home = () => {
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           {isInstRankings ? (
-            <div className="p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex flex-wrap items-center justify-between gap-4">
+            <div className="p-3.5 sm:p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-gray-900 dark:text-white text-sm">
@@ -311,13 +317,13 @@ export const Home = () => {
               </div>
             </div>
           ) : (
-            <div className="p-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex gap-4 items-center">
-              <div className="flex-1">
+            <div className="p-3.5 sm:p-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex gap-2.5 sm:gap-4 items-center">
+              <div className="flex-1 min-w-0">
                 <AddStock disabled={false} />
               </div>
               <button
                 onClick={() => loadBatchData(currentStocks)}
-                className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm flex items-center gap-2 text-gray-600 dark:text-gray-300 disabled:opacity-50"
+                className="px-3 sm:px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm flex items-center gap-2 text-gray-600 dark:text-gray-300 disabled:opacity-50 shrink-0"
                 title="重新整理報價"
                 disabled={isRefreshing || currentStocks.length === 0}
               >

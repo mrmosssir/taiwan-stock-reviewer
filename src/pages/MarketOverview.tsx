@@ -383,31 +383,32 @@ export const MarketOverview = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200 pb-16">
       {/* 導覽列 */}
       <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
             <button
               onClick={() => navigate('/')}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 dark:hover:text-white transition-colors"
+              className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 dark:hover:text-white transition-colors shrink-0"
               title="返回自選清單"
             >
               <ArrowLeft size={20} />
             </button>
-            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-              <BarChart3 size={24} strokeWidth={2.5} />
-              <h1 className="text-lg md:text-xl font-bold tracking-tight text-gray-900 dark:text-white">
-                台股大盤走勢與多空籌碼總覽
+            <div className="flex items-center gap-1.5 sm:gap-2 text-blue-600 dark:text-blue-400 min-w-0">
+              <BarChart3 size={20} strokeWidth={2.5} className="shrink-0 sm:w-6 sm:h-6" />
+              <h1 className="text-base md:text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">
+                <span className="md:hidden">大盤總覽</span>
+                <span className="hidden md:inline">台股大盤走勢與多空籌碼總覽</span>
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             {/* 時間週期切換器 */}
-            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+            <div className="flex items-center gap-0.5 sm:gap-1 bg-gray-100 dark:bg-gray-700 p-0.5 sm:p-1 rounded-lg">
               {(['D', 'W', 'M'] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTimeframe(t)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                  className={`px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
                     timeframe === t
                       ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
                       : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -421,42 +422,43 @@ export const MarketOverview = () => {
             <button
               onClick={() => loadData()}
               disabled={isLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50"
+              title="重新整理"
+              className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50"
             >
               <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-              重新整理
+              <span className="hidden sm:inline">重新整理</span>
             </button>
             <ThemeToggle />
           </div>
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* 頂部大盤體質與多空狀態卡 */}
         {current && (
-          <div className={`bg-white dark:bg-gray-800 rounded-2xl p-6 border-2 shadow-sm ${getStatusBorder(current.status)}`}>
+          <div className={`bg-white dark:bg-gray-800 rounded-2xl p-4 sm:p-6 border-2 shadow-sm ${getStatusBorder(current.status)}`}>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-gray-700">
               <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-2xl font-black tracking-tight text-gray-900 dark:text-white">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  <span className="text-lg sm:text-2xl font-black tracking-tight text-gray-900 dark:text-white">
                     發行量加權股價指數 (TAIEX)
                   </span>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase shadow-xs ${getStatusColor(current.status)}`}>
+                  <span className={`px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs font-bold tracking-wide uppercase shadow-xs ${getStatusColor(current.status)}`}>
                     {current.statusText}
                   </span>
                   {intradayUpdatedAt && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                       {current.isIntraday ? '盤中即時試算中' : '即時報價已連線'} ({intradayUpdatedAt})
                     </span>
                   )}
                 </div>
-                <div className="flex items-baseline gap-3">
-                  <span className="text-3xl font-black text-gray-900 dark:text-white">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white">
                     {(current.close ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                   <span
-                    className={`flex items-center text-base font-bold ${
+                    className={`flex items-center text-sm sm:text-base font-bold ${
                       (current.change || 0) >= 0 ? 'text-red-500' : 'text-emerald-500'
                     }`}
                   >
@@ -471,7 +473,7 @@ export const MarketOverview = () => {
                   <span className="text-xs text-gray-400 dark:text-gray-500">
                     {timeframe === 'D' ? '成交金額' : timeframe === 'W' ? '週累計金額' : '月累計金額'}：{((current.tradeValue ?? 0) / 1e8).toFixed(0)} 億元
                   </span>
-                  <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto md:ml-0">
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
                     統計{timeframe === 'D' ? '日期' : timeframe === 'W' ? '週期' : '月份'}：{current.date}
                   </span>
                 </div>
@@ -585,12 +587,12 @@ export const MarketOverview = () => {
         )}
 
         {/* 時間區間與圖表篩選工具列 */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xs">
-          {/* 圖表模式 Tab */}
-          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg text-xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-3 bg-white dark:bg-gray-800 p-2.5 sm:p-3 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xs">
+          {/* 圖表模式 Tab（手機可橫向滑動） */}
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg text-xs overflow-x-auto scrollbar-hide whitespace-nowrap">
             <button
               onClick={() => setActiveTab('all')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-md font-medium transition-colors ${
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-md font-medium shrink-0 transition-colors ${
                 activeTab === 'all'
                   ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 font-bold shadow-xs'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -600,7 +602,7 @@ export const MarketOverview = () => {
             </button>
             <button
               onClick={() => setActiveTab('score')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md font-medium shrink-0 transition-colors ${
                 activeTab === 'score'
                   ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 font-bold shadow-xs'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -610,7 +612,7 @@ export const MarketOverview = () => {
             </button>
             <button
               onClick={() => setActiveTab('inst')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md font-medium shrink-0 transition-colors ${
                 activeTab === 'inst'
                   ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 font-bold shadow-xs'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -620,7 +622,7 @@ export const MarketOverview = () => {
             </button>
             <button
               onClick={() => setActiveTab('futures')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md font-medium shrink-0 transition-colors ${
                 activeTab === 'futures'
                   ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 font-bold shadow-xs'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -630,7 +632,7 @@ export const MarketOverview = () => {
             </button>
             <button
               onClick={() => setActiveTab('margin')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md font-medium shrink-0 transition-colors ${
                 activeTab === 'margin'
                   ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 font-bold shadow-xs'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -640,7 +642,7 @@ export const MarketOverview = () => {
             </button>
             <button
               onClick={() => setActiveTab('sector')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md font-medium shrink-0 transition-colors ${
                 activeTab === 'sector'
                   ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 font-bold shadow-xs'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
