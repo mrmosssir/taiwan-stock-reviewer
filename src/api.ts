@@ -564,6 +564,78 @@ export const fetchSectorFlow = async (rebuild = false): Promise<SectorFlowRespon
   }
 };
 
+export interface IndustryCategoryItem {
+  industry: string;
+  totalCount: number;
+  activeCount: number;
+  lastDate: string;
+  avgChangePct: number;
+  turnoverRatio: number;
+  instNetAmount: number;
+  flowScore: number;
+  flowStatus: 'sun' | 'snow' | 'neutral';
+}
+
+export interface IndustriesResponse {
+  date: string;
+  industries: IndustryCategoryItem[];
+}
+
+export interface IndustryStockItem {
+  symbol: string;
+  name: string;
+  industry: string;
+  type: string;
+  lastDate: string;
+  lastClose: number | null;
+  lastChange: number | null;
+  lastChangePct: number | null;
+  isActive: boolean;
+  signalDate: string | null;
+}
+
+export interface IndustryStocksResponse {
+  industry: string;
+  lastDate: string;
+  total: number;
+  activeCount: number;
+  data: IndustryStockItem[];
+}
+
+export const fetchIndustries = async (): Promise<IndustriesResponse> => {
+  const response = await fetch('https://cloud-stock-chooser.mrmosssir.workers.dev/api/industries');
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const result = await response.json();
+  if (!result.success || !Array.isArray(result.industries)) {
+    throw new Error(result.error || 'Failed to load industries');
+  }
+  return {
+    date: result.date || '',
+    industries: result.industries,
+  };
+};
+
+export const fetchIndustryStocks = async (industry: string): Promise<IndustryStocksResponse> => {
+  const url = `https://cloud-stock-chooser.mrmosssir.workers.dev/api/industry-stocks?industry=${encodeURIComponent(industry)}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const result = await response.json();
+  if (!result.success || !Array.isArray(result.data)) {
+    throw new Error(result.error || 'Failed to load industry stocks');
+  }
+  return {
+    industry: result.industry || industry,
+    lastDate: result.lastDate || '',
+    total: Number(result.total) || result.data.length,
+    activeCount: Number(result.activeCount) || 0,
+    data: result.data,
+  };
+};
+
 export interface MarketDailyRecord {
   date: string;
   open: number;

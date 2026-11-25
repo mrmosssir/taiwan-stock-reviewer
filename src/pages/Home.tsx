@@ -13,6 +13,7 @@ import {
   RefreshCw,
   BarChart3,
   Trophy,
+  LayoutGrid,
 } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useWatchlist } from '../context/WatchlistContext';
@@ -162,10 +163,17 @@ export const Home = () => {
             <LineChart size={28} strokeWidth={2.5} />
             <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">StockReview</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              to="/industries"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-semibold transition-colors border border-indigo-200/50 dark:border-indigo-800/50"
+            >
+              <LayoutGrid size={15} />
+              <span>分類選股</span>
+            </Link>
             <Link
               to="/market"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs font-semibold transition-colors border border-blue-200/50 dark:border-blue-800/50"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs font-semibold transition-colors border border-blue-200/50 dark:border-blue-800/50"
             >
               <BarChart3 size={15} />
               <span>大盤總覽</span>
