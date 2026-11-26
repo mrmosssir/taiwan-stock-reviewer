@@ -10,6 +10,10 @@ export interface StockTicker {
   exchange: string;
   market: string;
   issuedShares?: number;
+  lastDate?: string | null;
+  lastClose?: number | null;
+  lastChange?: number | null;
+  lastChangePct?: number | null;
 }
 
 export interface StockQuote {
@@ -171,6 +175,10 @@ export const fetchTicker = async (symbol: string): Promise<StockTicker> => {
       exchange: data.exchange || '',
       market: data.type === 'tpex' ? 'OTC' : data.type === 'twse' ? 'TSE' : '',
       issuedShares: data.issuedShares ? Number(data.issuedShares) : 0,
+      lastDate: data.lastDate ?? null,
+      lastClose: data.lastClose !== null && data.lastClose !== undefined ? Number(data.lastClose) : null,
+      lastChange: data.lastChange !== null && data.lastChange !== undefined ? Number(data.lastChange) : null,
+      lastChangePct: data.lastChangePct !== null && data.lastChangePct !== undefined ? Number(data.lastChangePct) : null,
     };
   } catch (e) {
     console.error('Error fetching ticker info from backend:', e);
@@ -181,6 +189,10 @@ export const fetchTicker = async (symbol: string): Promise<StockTicker> => {
       exchange: '',
       market: '',
       issuedShares: 0,
+      lastDate: null,
+      lastClose: null,
+      lastChange: null,
+      lastChangePct: null,
     };
   }
 };
@@ -202,6 +214,10 @@ export const fetchTickers = async (symbols: string[]): Promise<Record<string, St
           exchange: item.exchange || '',
           market: item.type === 'tpex' ? 'OTC' : item.type === 'twse' ? 'TSE' : '',
           issuedShares: item.issuedShares ? Number(item.issuedShares) : 0,
+          lastDate: item.lastDate ?? null,
+          lastClose: item.lastClose !== null && item.lastClose !== undefined ? Number(item.lastClose) : null,
+          lastChange: item.lastChange !== null && item.lastChange !== undefined ? Number(item.lastChange) : null,
+          lastChangePct: item.lastChangePct !== null && item.lastChangePct !== undefined ? Number(item.lastChangePct) : null,
         };
       });
     }
@@ -235,35 +251,6 @@ export const fetchQuote = async (symbol: string): Promise<StockQuote> => {
     volume: data.volume,
     lastUpdated: data.lastUpdated,
   };
-};
-
-export const fetchQuotes = async (symbols: string[]): Promise<Record<string, StockQuote>> => {
-  if (symbols.length === 0) return {};
-  try {
-    const fetchUrl = `${CLOUD_PROXY_QUOTE_URL}?symbols=${symbols.join(',')}`;
-    const response = await fetch(fetchUrl);
-    const result = await response.json();
-    if (!result.success || !result.data) return {};
-    
-    const map: Record<string, StockQuote> = {};
-    result.data.forEach((item: any) => {
-      map[item.symbol] = {
-        symbol: item.symbol,
-        lastPrice: item.lastPrice,
-        change: item.change,
-        changePercent: item.changePercent,
-        open: item.open,
-        high: item.high,
-        low: item.low,
-        volume: item.volume,
-        lastUpdated: item.lastUpdated,
-      };
-    });
-    return map;
-  } catch (e) {
-    console.error('Error fetching quotes from backend:', e);
-    return {};
-  }
 };
 
 // --- FinMind API Section ---

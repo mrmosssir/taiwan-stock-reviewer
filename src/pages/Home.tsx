@@ -17,12 +17,8 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useWatchlist } from '../context/WatchlistContext';
-import { fetchLatestPicks, fetchInstRankings, fetchTickers, fetchQuotes } from '../api';
-import type { StockTicker, StockQuote, InstRankingsResponse, InstCostRankingItem } from '../api';
-import {
-  getTaiwanMarketSession,
-  verifyQuoteIsTodayOrLockHoliday,
-} from '../utils/tradingHours';
+import { fetchLatestPicks, fetchInstRankings, fetchTickers } from '../api';
+import type { StockTicker, InstRankingsResponse, InstCostRankingItem } from '../api';
 import clsx from 'clsx';
 
 export const Home = () => {
@@ -51,7 +47,6 @@ export const Home = () => {
   const fetchedInstRef = useRef(false);
 
   const [tickersMap, setTickersMap] = useState<Record<string, StockTicker>>({});
-  const [quotesMap, setQuotesMap] = useState<Record<string, StockQuote>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // 當切換到每日推薦時，去抓 API
@@ -125,16 +120,8 @@ export const Home = () => {
     if (symbols.length === 0) return;
     setIsRefreshing(true);
     try {
-      const [newTickers, newQuotes] = await Promise.all([
-        fetchTickers(symbols),
-        fetchQuotes(symbols)
-      ]);
+      const newTickers = await fetchTickers(symbols);
       setTickersMap(prev => ({ ...prev, ...newTickers }));
-      setQuotesMap(prev => ({ ...prev, ...newQuotes }));
-      const firstQuote = Object.values(newQuotes)[0];
-      if (firstQuote) {
-        verifyQuoteIsTodayOrLockHoliday(firstQuote.lastUpdated);
-      }
     } catch (e) {
       console.error('Batch fetch error:', e);
     } finally {
@@ -144,15 +131,6 @@ export const Home = () => {
 
   useEffect(() => {
     loadBatchData(currentStocks);
-
-    // 僅於開盤日盤中 (09:00 ~ 13:35) 才每 30 秒自動輪詢；收盤後、16:00後、週末與國定假日停止背景輪詢
-    const interval = setInterval(() => {
-      const sessionInfo = getTaiwanMarketSession();
-      if (!sessionInfo.shouldPollRealtime) return;
-      loadBatchData(currentStocks);
-    }, 30000);
-
-    return () => clearInterval(interval);
   }, [currentStocks.join(',')]);
 
   return (
@@ -194,7 +172,7 @@ export const Home = () => {
       <main className="max-w-4xl mx-auto px-3 sm:px-4 py-5 sm:py-8">
         <header className="mb-5 sm:mb-8">
           <h2 className="text-xl sm:text-2xl font-bold mb-1 sm:mb-2">我的台股觀察名單</h2>
-          <p className="text-xs sm:text-base text-gray-500 dark:text-gray-400">串接即時行情 API，追蹤自選股與全市場法人重倉動態</p>
+          <p className="text-xs sm:text-base text-gray-500 dark:text-gray-400">追蹤自選股最新收盤行情與全市場法人重倉動態</p>
         </header>
 
         {/* 資料夾分頁區 */}
@@ -353,8 +331,7 @@ export const Home = () => {
                   key={`${activeFolderId}-${instPeriod}-${symbol}`}
                   symbol={symbol}
                   ticker={tickersMap[symbol]}
-                  quote={quotesMap[symbol]}
-                  loading={!tickersMap[symbol] && !quotesMap[symbol] && !instRankingMap[symbol]}
+                  loading={!tickersMap[symbol] && !instRankingMap[symbol]}
                   onRemove={isDailyPicks || isInstRankings ? undefined : (s) => removeStockFromFolder(activeFolderId, s)}
                   readOnly={isDailyPicks || isInstRankings}
                   rank={isInstRankings ? idx + 1 : undefined}

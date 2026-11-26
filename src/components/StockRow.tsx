@@ -1,7 +1,7 @@
 import React from 'react';
 import { Trash2, TrendingUp, TrendingDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { StockQuote, StockTicker, InstCostRankingItem } from '../api';
+import type { StockTicker, InstCostRankingItem } from '../api';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -12,7 +12,6 @@ function cn(...inputs: ClassValue[]) {
 interface StockRowProps {
   symbol: string;
   ticker?: StockTicker;
-  quote?: StockQuote;
   error?: string;
   loading?: boolean;
   onRemove?: (symbol: string) => void;
@@ -25,7 +24,6 @@ interface StockRowProps {
 export const StockRow: React.FC<StockRowProps> = ({
   symbol,
   ticker,
-  quote,
   error,
   loading,
   onRemove,
@@ -34,7 +32,7 @@ export const StockRow: React.FC<StockRowProps> = ({
   instRanking,
   activeInstPeriod = '1d',
 }) => {
-  if (loading && !ticker && !quote && !instRanking) {
+  if (loading && !ticker && !instRanking) {
     return (
       <div className="animate-pulse flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
         <div className="flex gap-4">
@@ -61,9 +59,19 @@ export const StockRow: React.FC<StockRowProps> = ({
 
   const displayName = ticker?.name || instRanking?.name || '';
   const displaySub = ticker?.exchange || ticker?.market || instRanking?.industry || '';
-  const displayPrice = quote?.lastPrice ?? instRanking?.close;
-  const isUp = quote && quote.change > 0;
-  const isDown = quote && quote.change < 0;
+  const displayPrice =
+    ticker?.lastClose !== undefined && ticker?.lastClose !== null && ticker.lastClose > 0
+      ? ticker.lastClose
+      : instRanking?.close;
+  const hasChange =
+    ticker?.lastChange !== undefined &&
+    ticker?.lastChange !== null &&
+    ticker?.lastChangePct !== undefined &&
+    ticker?.lastChangePct !== null;
+  const lastChange = hasChange ? ticker!.lastChange! : 0;
+  const lastChangePct = hasChange ? ticker!.lastChangePct! : 0;
+  const isUp = hasChange && lastChange > 0;
+  const isDown = hasChange && lastChange < 0;
 
   const refCostPrice =
     activeInstPeriod === '12d' ? instRanking?.avgCost12d : instRanking?.avgCost6d;
@@ -170,9 +178,9 @@ export const StockRow: React.FC<StockRowProps> = ({
             {isUp && <TrendingUp size={12} className="mr-0.5 sm:mr-1 shrink-0" />}
             {isDown && <TrendingDown size={12} className="mr-0.5 sm:mr-1 shrink-0" />}
             <span>
-              {quote ? (
+              {hasChange ? (
                 <>
-                  {quote.change > 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.changePercent.toFixed(2)}%)
+                  {lastChange > 0 ? '+' : ''}{lastChange.toFixed(2)} ({lastChangePct.toFixed(2)}%)
                 </>
               ) : '-'}
             </span>

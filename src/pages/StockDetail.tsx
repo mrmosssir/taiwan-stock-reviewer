@@ -5,7 +5,6 @@ import {
   fetchStockHistoryFull,
   fetchMarginTrading,
   fetchFinancialStatements,
-  fetchQuote,
   fetchDividends,
   adjustCandles,
 } from '../api';
@@ -24,10 +23,6 @@ import { calculateSignals, SIGNAL_STRATEGIES } from '../utils/signals';
 import { aggregateCandles, aggregateInstitutional } from '../utils/resample';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useWatchlist } from '../context/WatchlistContext';
-import {
-  getTaiwanMarketSession,
-  verifyQuoteIsTodayOrLockHoliday,
-} from '../utils/tradingHours';
 
 const WatchlistDropdown = ({ symbol }: { symbol: string }) => {
   const { folders, getFoldersContainingStock, addStockToFolder, removeStockFromFolder } = useWatchlist();
@@ -140,114 +135,21 @@ export const StockDetail: React.FC = () => {
 
   const initialVisibleBars = timeframe === 'M' ? 36 : timeframe === 'W' ? 60 : 120;
 
-  // 盤中即時更新 (僅於開盤日 09:00 ~ 13:35 每 15 秒輪詢一次；收盤後、16:00後、週六日與國定假日不輪詢)
-  useEffect(() => {
-    if (!symbol) return;
-
-    const intervalId = setInterval(async () => {
-      const sessionInfo = getTaiwanMarketSession();
-      if (!sessionInfo.shouldPollRealtime) {
-        return;
-      }
-
-      try {
-        const quoteData = await fetchQuote(symbol);
-        if (!quoteData || quoteData.lastPrice <= 0) return;
-        if (!verifyQuoteIsTodayOrLockHoliday(quoteData.lastUpdated)) return;
-
-        const d = quoteData.lastUpdated ? new Date(quoteData.lastUpdated) : new Date();
-        const quoteDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-        setRawCandles(prevCandles => {
-          if (prevCandles.length === 0) return prevCandles;
-          
-          const newCandles = [...prevCandles];
-          const lastCandle = { ...newCandles[newCandles.length - 1] };
-
-          if (lastCandle.date === quoteDate) {
-            // 若數值皆相同則不觸發 re-render
-            if (
-              lastCandle.close === quoteData.lastPrice &&
-              lastCandle.high === Math.max(lastCandle.high, quoteData.high || quoteData.lastPrice) &&
-              lastCandle.low === Math.min(lastCandle.low, quoteData.low || quoteData.lastPrice) &&
-              lastCandle.volume === (quoteData.volume || lastCandle.volume)
-            ) {
-              return prevCandles;
-            }
-
-            lastCandle.close = quoteData.lastPrice;
-            lastCandle.high = Math.max(lastCandle.high, quoteData.high || quoteData.lastPrice);
-            lastCandle.low = Math.min(lastCandle.low, quoteData.low || quoteData.lastPrice);
-            lastCandle.volume = quoteData.volume || lastCandle.volume;
-            
-            newCandles[newCandles.length - 1] = lastCandle;
-            return newCandles;
-          } else if (lastCandle.date < quoteDate) {
-            newCandles.push({
-              date: quoteDate,
-              open: quoteData.open || quoteData.lastPrice,
-              high: quoteData.high || quoteData.lastPrice,
-              low: quoteData.low || quoteData.lastPrice,
-              close: quoteData.lastPrice,
-              volume: quoteData.volume || 0,
-            });
-            return newCandles;
-          }
-
-          return prevCandles;
-        });
-      } catch (error) {
-        console.error('Error fetching intraday quote:', error);
-      }
-    }, 15000);
-
-    return () => clearInterval(intervalId);
-  }, [symbol]);
-
   useEffect(() => {
     const loadAllData = async () => {
       if (!symbol) return;
       setLoading(true);
       try {
-        const [tickerData, historyData, marginData, finData, quoteData, divs] = await Promise.all([
+        const [tickerData, historyData, marginData, finData, divs] = await Promise.all([
           fetchTicker(symbol),
           fetchStockHistoryFull(symbol),
           fetchMarginTrading(symbol, 360),
           fetchFinancialStatements(symbol),
-          fetchQuote(symbol).catch(() => null),
           fetchDividends(symbol, 3600)
         ]);
 
-        let finalCandles = [...historyData.candles];
-        
-        // 初始載入時，僅在當日尚無完整歷史 K 線或處於 16:00 前時整合即時報價至 K 線
-        if (quoteData && quoteData.lastPrice > 0) {
-          verifyQuoteIsTodayOrLockHoliday(quoteData.lastUpdated);
-          const d = quoteData.lastUpdated ? new Date(quoteData.lastUpdated) : new Date();
-          const quoteDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-          
-          if (finalCandles.length > 0) {
-            const lastCandle = finalCandles[finalCandles.length - 1];
-            if (lastCandle.date === quoteDate) {
-              lastCandle.close = quoteData.lastPrice;
-              lastCandle.high = Math.max(lastCandle.high, quoteData.high || quoteData.lastPrice);
-              lastCandle.low = Math.min(lastCandle.low, quoteData.low || quoteData.lastPrice);
-              lastCandle.volume = quoteData.volume || lastCandle.volume;
-            } else if (lastCandle.date < quoteDate) {
-              finalCandles.push({
-                date: quoteDate,
-                open: quoteData.open || quoteData.lastPrice,
-                high: quoteData.high || quoteData.lastPrice,
-                low: quoteData.low || quoteData.lastPrice,
-                close: quoteData.lastPrice,
-                volume: quoteData.volume || 0,
-              });
-            }
-          }
-        }
-
         setTicker(tickerData);
-        setRawCandles(finalCandles);
+        setRawCandles(historyData.candles);
         setDividends(divs);
         setInstitutional(historyData.institutional);
         setMargin(marginData);
