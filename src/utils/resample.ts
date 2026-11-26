@@ -196,6 +196,11 @@ export function aggregateMarketRecords(
       dealerNet: totalDealerNet,
       totalInstNet: totalInstNet,
       foreignFuturesOI: last.foreignFuturesOI,
+      trustFuturesOI: last.trustFuturesOI ?? 0,
+      dealerFuturesOI: last.dealerFuturesOI ?? 0,
+      totalFuturesOI:
+        last.totalFuturesOI ??
+        (last.foreignFuturesOI || 0) + (last.trustFuturesOI || 0) + (last.dealerFuturesOI || 0),
       marginBalance: last.marginBalance,
       marginDiff: totalMarginDiff,
       shortBalance: last.shortBalance,

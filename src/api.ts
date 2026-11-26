@@ -651,6 +651,9 @@ export interface MarketDailyRecord {
   dealerNet: number;
   totalInstNet: number;
   foreignFuturesOI: number;
+  trustFuturesOI?: number;
+  dealerFuturesOI?: number;
+  totalFuturesOI?: number;
   marginBalance: number;
   marginDiff: number;
   shortBalance: number;
@@ -669,36 +672,50 @@ export interface MarketDailyRecord {
   isIntraday?: boolean;
 }
 
-export const normalizeMarketRecord = (raw: any): MarketDailyRecord => ({
-  date: raw.date || '',
-  open: Number(raw.open) || 0,
-  high: Number(raw.high) || 0,
-  low: Number(raw.low) || 0,
-  close: Number(raw.close) || 0,
-  volume: Number(raw.volume) || 0,
-  tradeValue: Number(raw.tradeValue ?? raw.trade_value) || 0,
-  change: Number(raw.change) || 0,
-  foreignNet: Number(raw.foreignNet ?? raw.foreign_net) || 0,
-  trustNet: Number(raw.trustNet ?? raw.trust_net) || 0,
-  dealerNet: Number(raw.dealerNet ?? raw.dealer_net) || 0,
-  totalInstNet: Number(raw.totalInstNet ?? raw.total_inst_net) || 0,
-  foreignFuturesOI: Number(raw.foreignFuturesOI ?? raw.foreign_futures_oi) || 0,
-  marginBalance: Number(raw.marginBalance ?? raw.margin_balance) || 0,
-  marginDiff: Number(raw.marginDiff ?? raw.margin_diff) || 0,
-  shortBalance: Number(raw.shortBalance ?? raw.short_balance) || 0,
-  shortDiff: Number(raw.shortDiff ?? raw.short_diff) || 0,
-  score: Number(raw.score) || 50,
-  status: raw.status || 'consolidation',
-  statusText: raw.statusText || raw.status_text || '區間震盪',
-  summary: raw.summary || '',
-  ma5: raw.ma5 !== undefined ? Number(raw.ma5) : undefined,
-  ma20: raw.ma20 !== undefined ? Number(raw.ma20) : undefined,
-  ma60: raw.ma60 !== undefined ? Number(raw.ma60) : undefined,
-  rsi14: raw.rsi14 !== undefined ? Number(raw.rsi14) : undefined,
-  kdK: raw.kdK !== undefined ? Number(raw.kdK) : undefined,
-  kdD: raw.kdD !== undefined ? Number(raw.kdD) : undefined,
-  macdHist: raw.macdHist !== undefined ? Number(raw.macdHist) : undefined,
-});
+export const normalizeMarketRecord = (raw: any): MarketDailyRecord => {
+  const foreignFuturesOI = Number(raw.foreignFuturesOI ?? raw.foreign_futures_oi) || 0;
+  const trustFuturesOI = Number(raw.trustFuturesOI ?? raw.trust_futures_oi) || 0;
+  const dealerFuturesOI = Number(raw.dealerFuturesOI ?? raw.dealer_futures_oi) || 0;
+  const rawTotalOI = raw.totalFuturesOI ?? raw.total_futures_oi;
+  const totalFuturesOI =
+    rawTotalOI !== undefined && rawTotalOI !== null
+      ? Number(rawTotalOI) || 0
+      : foreignFuturesOI + trustFuturesOI + dealerFuturesOI;
+
+  return {
+    date: raw.date || '',
+    open: Number(raw.open) || 0,
+    high: Number(raw.high) || 0,
+    low: Number(raw.low) || 0,
+    close: Number(raw.close) || 0,
+    volume: Number(raw.volume) || 0,
+    tradeValue: Number(raw.tradeValue ?? raw.trade_value) || 0,
+    change: Number(raw.change) || 0,
+    foreignNet: Number(raw.foreignNet ?? raw.foreign_net) || 0,
+    trustNet: Number(raw.trustNet ?? raw.trust_net) || 0,
+    dealerNet: Number(raw.dealerNet ?? raw.dealer_net) || 0,
+    totalInstNet: Number(raw.totalInstNet ?? raw.total_inst_net) || 0,
+    foreignFuturesOI,
+    trustFuturesOI,
+    dealerFuturesOI,
+    totalFuturesOI,
+    marginBalance: Number(raw.marginBalance ?? raw.margin_balance) || 0,
+    marginDiff: Number(raw.marginDiff ?? raw.margin_diff) || 0,
+    shortBalance: Number(raw.shortBalance ?? raw.short_balance) || 0,
+    shortDiff: Number(raw.shortDiff ?? raw.short_diff) || 0,
+    score: Number(raw.score) || 50,
+    status: raw.status || 'consolidation',
+    statusText: raw.statusText || raw.status_text || '區間震盪',
+    summary: raw.summary || '',
+    ma5: raw.ma5 !== undefined ? Number(raw.ma5) : undefined,
+    ma20: raw.ma20 !== undefined ? Number(raw.ma20) : undefined,
+    ma60: raw.ma60 !== undefined ? Number(raw.ma60) : undefined,
+    rsi14: raw.rsi14 !== undefined ? Number(raw.rsi14) : undefined,
+    kdK: raw.kdK !== undefined ? Number(raw.kdK) : undefined,
+    kdD: raw.kdD !== undefined ? Number(raw.kdD) : undefined,
+    macdHist: raw.macdHist !== undefined ? Number(raw.macdHist) : undefined,
+  };
+};
 
 export const fetchMarketLatest = async (): Promise<MarketDailyRecord | null> => {
   try {

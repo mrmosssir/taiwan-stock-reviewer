@@ -11,6 +11,18 @@ interface MarketFuturesChartProps {
   syncId?: string;
 }
 
+type FuturesIdentity = 'total' | 'foreign' | 'trust' | 'dealer';
+
+const getFuturesValue = (d: MarketDailyRecord, identity: FuturesIdentity): number => {
+  if (identity === 'foreign') return d.foreignFuturesOI ?? 0;
+  if (identity === 'trust') return d.trustFuturesOI ?? 0;
+  if (identity === 'dealer') return d.dealerFuturesOI ?? 0;
+  return (
+    d.totalFuturesOI ??
+    (d.foreignFuturesOI ?? 0) + (d.trustFuturesOI ?? 0) + (d.dealerFuturesOI ?? 0)
+  );
+};
+
 export const MarketFuturesChart: React.FC<MarketFuturesChartProps> = ({
   data,
   initialVisibleBars = 120,
@@ -21,27 +33,33 @@ export const MarketFuturesChart: React.FC<MarketFuturesChartProps> = ({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Baseline'> | null>(null);
   const dataMapRef = useRef<Map<string, MarketDailyRecord>>(new Map());
+  const selectedIdentityRef = useRef<FuturesIdentity>('foreign');
   const prevDataLenRef = useRef<number>(0);
   const prevFirstDateRef = useRef<string>('');
   const prevLastDateRef = useRef<string>('');
   const hasInitializedRangeRef = useRef<boolean>(false);
   const isUpdatingSeriesRef = useRef<boolean>(false);
 
+  const [selectedIdentity, setSelectedIdentity] = useState<FuturesIdentity>('foreign');
   const [hoveredData, setHoveredData] = useState<MarketDailyRecord | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() =>
     typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : false
   );
 
-  // 預先計算每一期的期貨 OI 較前期增減口數
+  useEffect(() => {
+    selectedIdentityRef.current = selectedIdentity;
+  }, [selectedIdentity]);
+
+  // 預先計算每一期當前對象的期貨 OI 較前期增減口數
   const diffMap = useMemo(() => {
     const m = new Map<string, number>();
     for (let i = 0; i < data.length; i++) {
-      const cur = data[i].foreignFuturesOI ?? 0;
-      const prev = i > 0 ? (data[i - 1].foreignFuturesOI ?? cur) : cur;
+      const cur = getFuturesValue(data[i], selectedIdentity);
+      const prev = i > 0 ? getFuturesValue(data[i - 1], selectedIdentity) : cur;
       m.set(data[i].date, cur - prev);
     }
     return m;
-  }, [data]);
+  }, [data, selectedIdentity]);
 
   useEffect(() => {
     const updateTheme = () => {
@@ -149,7 +167,11 @@ export const MarketFuturesChart: React.FC<MarketFuturesChartProps> = ({
       id: syncId,
       chart: chartRef.current,
       getMainSeries: () => seriesRef.current,
-      getValueAtTime: (timeStr) => dataMapRef.current.get(timeStr)?.foreignFuturesOI,
+      getValueAtTime: (timeStr) => {
+        const record = dataMapRef.current.get(timeStr);
+        if (!record) return undefined;
+        return getFuturesValue(record, selectedIdentityRef.current);
+      },
       onHoverTimeChange: (timeStr) => {
         setHoveredData(timeStr ? dataMapRef.current.get(timeStr) || null : null);
       },
@@ -213,7 +235,7 @@ export const MarketFuturesChart: React.FC<MarketFuturesChartProps> = ({
     try {
       const formatted = data.map((d) => ({
         time: d.date as Time,
-        value: d.foreignFuturesOI,
+        value: getFuturesValue(d, selectedIdentity),
       }));
 
       series.setData(formatted);
@@ -248,55 +270,83 @@ export const MarketFuturesChart: React.FC<MarketFuturesChartProps> = ({
     } finally {
       isUpdatingSeriesRef.current = false;
     }
-  }, [data, initialVisibleBars, syncController]);
+  }, [data, selectedIdentity, initialVisibleBars, syncController]);
 
   const activeDisplay = hoveredData || (data.length > 0 ? data[data.length - 1] : null);
+  const activeVal = activeDisplay ? getFuturesValue(activeDisplay, selectedIdentity) : 0;
   const activeDiff = activeDisplay ? (diffMap.get(activeDisplay.date) ?? 0) : 0;
+
+  const identityLabels: Record<FuturesIdentity, string> = {
+    total: '三大法人合計',
+    foreign: '外資',
+    trust: '投信',
+    dealer: '自營商',
+  };
 
   return (
     <div className="flex flex-col bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
-            ⚡ 外資台指期未平倉口數 (Net OI)
+            ⚡ 台指期未平倉口數 (Net OI)
           </span>
-          {/* 比照均線風格的頂部彩色圖例列 */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium bg-gray-50 dark:bg-gray-900/60 px-2.5 py-1 rounded-lg border border-gray-100 dark:border-gray-700/60">
+
+          {/* 三大法人切換器 */}
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 p-0.5 rounded-lg text-xs">
+            {(
+              [
+                { id: 'total', label: '合計' },
+                { id: 'foreign', label: '外資' },
+                { id: 'trust', label: '投信' },
+                { id: 'dealer', label: '自營商' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setSelectedIdentity(opt.id)}
+                className={`px-2 py-0.5 rounded-md font-medium transition-colors cursor-pointer ${
+                  selectedIdentity === opt.id
+                    ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 font-bold shadow-xs'
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 頂部彩色圖例列 */}
+          <div className="hidden sm:flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium bg-gray-50 dark:bg-gray-900/60 px-2.5 py-1 rounded-lg border border-gray-100 dark:border-gray-700/60">
             <span className="inline-flex items-center gap-1.5 text-red-500">
               <span className="inline-block w-2.5 h-0.5 rounded-full bg-red-500" />
               淨多單 (&gt;0口)
             </span>
-            <span className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
-              <span className="inline-block w-3 border-b-2 border-dotted border-gray-400" />
-              零軸基準: 0口
-            </span>
             <span className="inline-flex items-center gap-1.5 text-emerald-500">
               <span className="inline-block w-2.5 h-0.5 rounded-full bg-emerald-500" />
-              淨空單/避險 (&lt;0口)
+              淨空單 (&lt;0口)
             </span>
           </div>
         </div>
 
         {activeDisplay && (
-          <div className="flex flex-wrap items-center gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span className="font-semibold text-gray-600 dark:text-gray-300">{activeDisplay.date}</span>
             <span>
-              未平倉淨額：
-              <strong
-                className={
-                  (activeDisplay.foreignFuturesOI ?? 0) >= 0 ? 'text-red-500' : 'text-emerald-500'
-                }
-              >
-                {(activeDisplay.foreignFuturesOI ?? 0) > 0 ? '+' : ''}
-                {(activeDisplay.foreignFuturesOI ?? 0).toLocaleString()} 口
+              {identityLabels[selectedIdentity]}：
+              <strong className={activeVal >= 0 ? 'text-red-500' : 'text-emerald-500'}>
+                {activeVal > 0 ? '+' : ''}
+                {activeVal.toLocaleString()} 口
               </strong>
             </span>
             <span>
-              當期增減：
+              增減：
               <strong className={activeDiff >= 0 ? 'text-red-500' : 'text-emerald-500'}>
                 {activeDiff > 0 ? '+' : ''}
                 {activeDiff.toLocaleString()} 口
               </strong>
+            </span>
+            <span className="text-[11px] text-gray-400 dark:text-gray-500">
+              外 {(activeDisplay.foreignFuturesOI ?? 0).toLocaleString()} | 投 {(activeDisplay.trustFuturesOI ?? 0).toLocaleString()} | 自 {(activeDisplay.dealerFuturesOI ?? 0).toLocaleString()}
             </span>
           </div>
         )}

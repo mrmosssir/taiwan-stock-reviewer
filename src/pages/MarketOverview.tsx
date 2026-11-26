@@ -112,6 +112,11 @@ function mergeIntradayMarketQuote(
       dealerNet: 0,
       totalInstNet: 0,
       foreignFuturesOI: last.foreignFuturesOI,
+      trustFuturesOI: last.trustFuturesOI ?? 0,
+      dealerFuturesOI: last.dealerFuturesOI ?? 0,
+      totalFuturesOI:
+        last.totalFuturesOI ??
+        (last.foreignFuturesOI || 0) + (last.trustFuturesOI || 0) + (last.dealerFuturesOI || 0),
       marginBalance: last.marginBalance,
       marginDiff: 0,
       shortBalance: last.shortBalance,
@@ -544,16 +549,25 @@ export const MarketOverview = () => {
                 </div>
               </div>
 
-              {/* 2. 外資期貨未平倉 */}
-              <div className="bg-gray-50 dark:bg-gray-700/40 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                <div className="text-xs text-gray-500 dark:text-gray-400">外資台指期未平倉</div>
-                <div className={`text-lg font-bold mt-1 ${(current.foreignFuturesOI ?? 0) >= 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                  {(current.foreignFuturesOI ?? 0) > 0 ? '+' : ''}{(current.foreignFuturesOI ?? 0).toLocaleString()} 口
-                </div>
-                <div className="text-[11px] text-gray-400 mt-0.5">
-                  {(current.foreignFuturesOI ?? 0) <= -30000 ? '⚠️ 重兵避險空單' : (current.foreignFuturesOI ?? 0) >= 0 ? '🔥 淨多單偏多' : '常態避險調節'}
-                </div>
-              </div>
+              {/* 2. 三大法人台指期合計未平倉 */}
+              {(() => {
+                const totalFut =
+                  current.totalFuturesOI ??
+                  (current.foreignFuturesOI ?? 0) +
+                    (current.trustFuturesOI ?? 0) +
+                    (current.dealerFuturesOI ?? 0);
+                return (
+                  <div className="bg-gray-50 dark:bg-gray-700/40 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">三大法人台指期合計</div>
+                    <div className={`text-lg font-bold mt-1 ${totalFut >= 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                      {totalFut > 0 ? '+' : ''}{totalFut.toLocaleString()} 口
+                    </div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">
+                      外資 {(current.foreignFuturesOI ?? 0).toLocaleString()} | 投信 {(current.trustFuturesOI ?? 0).toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* 3. 散戶融資餘額 */}
               <div className="bg-gray-50 dark:bg-gray-700/40 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
