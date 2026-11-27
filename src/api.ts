@@ -291,6 +291,49 @@ export interface FinancialStatementData {
   value: number;
 }
 
+export interface FinancialSummary {
+  latestRevenuePeriod: string | null;
+  latestRevenue: number | null;
+  latestRevenueMomPct: number | null;
+  latestRevenueYoyPct: number | null;
+  latestYtdYoyPct: number | null;
+  latestQuarter: string | null;
+  ttmEps: number | null;
+  latestGrossMargin: number | null;
+  grossMarginQoqDiff: number | null;
+  latestOperatingMargin: number | null;
+  operatingMarginQoqDiff: number | null;
+  latestNetMargin: number | null;
+  annualizedRoe: number | null;
+  latestDebtRatio: number | null;
+}
+
+export interface MonthlyRevenueItem {
+  period: string;
+  revenue: number;
+  momPct: number | null;
+  yoyPct: number | null;
+  ytdRevenue: number | null;
+  ytdYoyPct: number | null;
+}
+
+export interface QuarterlyFinancialItem {
+  date: string;
+  quarter: string;
+  revenue: number | null;
+  revenueYoyPct: number | null;
+  netIncome: number | null;
+  eps: number | null;
+  epsYoyPct: number | null;
+  grossMargin: number | null;
+  operatingMargin: number | null;
+  netMargin: number | null;
+  debtRatio: number | null;
+  annualizedRoe: number | null;
+  ocf: number | null;
+  ocfToNetIncome: number | null;
+}
+
 export interface ComprehensiveFinancials {
   revenue: FinancialStatementData[];
   grossMargin: FinancialStatementData[];
@@ -299,7 +342,10 @@ export interface ComprehensiveFinancials {
   eps: FinancialStatementData[];
   debtRatio: FinancialStatementData[];
   roe: FinancialStatementData[];
-  ocf: FinancialStatementData[]; 
+  ocf: FinancialStatementData[];
+  summary?: FinancialSummary;
+  monthlyRevenue?: MonthlyRevenueItem[];
+  quarterly?: QuarterlyFinancialItem[];
 }
 
 export const fetchDividends = async (symbol: string, rangeDays: number = 3600): Promise<DividendData[]> => {
@@ -396,63 +442,60 @@ export const fetchMarginTrading = async (symbol: string, days: number = 45): Pro
 };
 
 export const fetchFinancialStatements = async (symbol: string): Promise<ComprehensiveFinancials> => {
+  const empty: ComprehensiveFinancials = {
+    revenue: [],
+    grossMargin: [],
+    operatingMargin: [],
+    netIncome: [],
+    eps: [],
+    debtRatio: [],
+    roe: [],
+    ocf: [],
+    monthlyRevenue: [],
+    quarterly: [],
+  };
+
   try {
-    const [fsRes, bsRes, cfRes] = await Promise.all([
-      axios.get(FINMIND_BASE_URL, { params: { dataset: 'TaiwanStockFinancialStatements', data_id: symbol, start_date: '2022-01-01' } }),
-      axios.get(FINMIND_BASE_URL, { params: { dataset: 'TaiwanStockBalanceSheet', data_id: symbol, start_date: '2022-01-01' } }),
-      axios.get(FINMIND_BASE_URL, { params: { dataset: 'TaiwanStockCashFlowsStatement', data_id: symbol, start_date: '2022-01-01' } })
-    ]);
+    const response = await fetch(
+      `https://cloud-stock-chooser.mrmosssir.workers.dev/api/stock-financials?id=${encodeURIComponent(symbol)}`
+    );
+    if (!response.ok) return empty;
+    const payload = await response.json();
+    if (!payload?.success) return empty;
 
-    const fsRaw = fsRes.data.data || [];
-    const bsRaw = bsRes.data.data || [];
-    const cfRaw = cfRes.data.data || [];
-
-    const byDate: Record<string, { fs: any, bs: any, cf: any }> = {};
-
-    const addToGroup = (items: any[], source: 'fs' | 'bs' | 'cf') => {
-      items.forEach((item: any) => {
-        if (!byDate[item.date]) byDate[item.date] = { fs: {}, bs: {}, cf: {} };
-        byDate[item.date][source][item.type] = Number(item.value);
-      });
-    };
-
-    addToGroup(fsRaw, 'fs');
-    addToGroup(bsRaw, 'bs');
-    addToGroup(cfRaw, 'cf');
+    const quarterly: QuarterlyFinancialItem[] = Array.isArray(payload.quarterly) ? payload.quarterly : [];
+    const monthlyRevenue: MonthlyRevenueItem[] = Array.isArray(payload.monthlyRevenue) ? payload.monthlyRevenue : [];
+    const summary: FinancialSummary | undefined = payload.summary;
 
     const result: ComprehensiveFinancials = {
-      revenue: [], grossMargin: [], operatingMargin: [], netIncome: [], eps: [], debtRatio: [], roe: [], ocf: []
+      revenue: [],
+      grossMargin: [],
+      operatingMargin: [],
+      netIncome: [],
+      eps: [],
+      debtRatio: [],
+      roe: [],
+      ocf: [],
+      summary,
+      monthlyRevenue,
+      quarterly,
     };
 
-    Object.keys(byDate).sort().forEach(date => {
-      const { fs, bs, cf } = byDate[date];
-      
-      const revenue = fs['Revenue'] || fs['營業收入'] || fs['RevenueIncome'];
-      const eps = fs['EPS'] || fs['每股盈餘'] || fs['EarningsPerShare'] || fs['基本每股盈餘'] || fs['基本每股盈餘（元）'];
-      const grossProfit = fs['GrossProfit'] || fs['營業毛利（毛損）'] || fs['營業毛利'];
-      const operatingIncome = fs['OperatingIncome'] || fs['營業利益（損失）'] || fs['營業利益'];
-      const netIncome = fs['IncomeAfterTaxes'] || fs['EquityAttributableToOwnersOfParent'] || fs['NetIncome'] || fs['本期淨利（淨損）'] || fs['NetProfit'];
-
-      const totalAssets = bs['TotalAssets'] || bs['Assets'] || bs['資產總額'];
-      const totalLiabilities = bs['Liabilities'] || bs['TotalLiabilities'] || bs['負債總額'];
-      const totalEquity = bs['Equity'] || bs['TotalEquity'] || bs['權益總額'] || bs['EquityAttributableToOwnersOfParent'];
-
-      const ocf = cf['CashFlowsFromOperatingActivities'] || cf['NetCashFlowFromOperatingActivities'] || cf['營業活動之淨現金流入（流出）'];
-
-      if (revenue) result.revenue.push({ date, type: 'Revenue', value: revenue });
-      if (eps) result.eps.push({ date, type: 'EPS', value: eps });
-      if (netIncome) result.netIncome.push({ date, type: 'NetIncome', value: netIncome });
-      if (grossProfit && revenue) result.grossMargin.push({ date, type: 'GrossMargin', value: (grossProfit / revenue) * 100 });
-      if (operatingIncome && revenue) result.operatingMargin.push({ date, type: 'OperatingMargin', value: (operatingIncome / revenue) * 100 });
-      if (totalLiabilities && totalAssets) result.debtRatio.push({ date, type: 'DebtRatio', value: (totalLiabilities / totalAssets) * 100 });
-      if (netIncome && totalEquity) result.roe.push({ date, type: 'ROE', value: (netIncome / totalEquity) * 100 });
-      if (ocf) result.ocf.push({ date, type: 'OCF', value: ocf });
-    });
+    for (const q of quarterly) {
+      if (q.revenue !== null) result.revenue.push({ date: q.date, type: 'Revenue', value: q.revenue });
+      if (q.eps !== null) result.eps.push({ date: q.date, type: 'EPS', value: q.eps });
+      if (q.netIncome !== null) result.netIncome.push({ date: q.date, type: 'NetIncome', value: q.netIncome });
+      if (q.grossMargin !== null) result.grossMargin.push({ date: q.date, type: 'GrossMargin', value: q.grossMargin });
+      if (q.operatingMargin !== null) result.operatingMargin.push({ date: q.date, type: 'OperatingMargin', value: q.operatingMargin });
+      if (q.debtRatio !== null) result.debtRatio.push({ date: q.date, type: 'DebtRatio', value: q.debtRatio });
+      if (q.annualizedRoe !== null) result.roe.push({ date: q.date, type: 'ROE', value: q.annualizedRoe });
+      if (q.ocf !== null) result.ocf.push({ date: q.date, type: 'OCF', value: q.ocf });
+    }
 
     return result;
   } catch (error) {
-    console.error('FinMind Financial Fetch Error:', error);
-    return { revenue: [], grossMargin: [], operatingMargin: [], netIncome: [], eps: [], debtRatio: [], roe: [], ocf: [] };
+    console.error('Backend Financial Fetch Error:', error);
+    return empty;
   }
 };
 
