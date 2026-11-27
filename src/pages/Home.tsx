@@ -136,24 +136,24 @@ export const Home = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
       <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-            <LineChart size={28} strokeWidth={2.5} />
-            <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">StockReview</h1>
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-blue-600 dark:text-blue-400 min-w-0">
+            <LineChart size={24} strokeWidth={2.5} className="shrink-0 sm:w-7 sm:h-7" />
+            <h1 className="text-base sm:text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">StockReview</h1>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <Link
               to="/industries"
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-semibold transition-colors border border-indigo-200/50 dark:border-indigo-800/50"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-semibold transition-colors border border-indigo-200/50 dark:border-indigo-800/50 whitespace-nowrap"
             >
-              <LayoutGrid size={15} />
+              <LayoutGrid size={14} className="shrink-0" />
               <span>分類選股</span>
             </Link>
             <Link
               to="/market"
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs font-semibold transition-colors border border-blue-200/50 dark:border-blue-800/50"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs font-semibold transition-colors border border-blue-200/50 dark:border-blue-800/50 whitespace-nowrap"
             >
-              <BarChart3 size={15} />
+              <BarChart3 size={14} className="shrink-0" />
               <span>大盤總覽</span>
             </Link>
             <ThemeToggle />
@@ -161,7 +161,7 @@ export const Home = () => {
               href="https://github.com"
               target="_blank"
               rel="noreferrer"
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              className="hidden sm:inline-flex text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             >
               <Github size={20} />
             </a>
@@ -267,20 +267,21 @@ export const Home = () => {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 bg-gray-200/70 dark:bg-gray-700 p-1 rounded-lg text-xs font-semibold">
+              <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
+                <div className="flex items-center gap-1 bg-gray-200/70 dark:bg-gray-700 p-1 rounded-lg text-xs font-semibold flex-1 sm:flex-none">
                   {(['1d', '6d', '12d'] as const).map(p => (
                     <button
                       key={p}
                       onClick={() => setInstPeriod(p)}
                       className={clsx(
-                        'px-3 py-1.5 rounded-md transition-all',
+                        'flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 rounded-md transition-all whitespace-nowrap',
                         instPeriod === p
                           ? 'bg-white dark:bg-gray-600 text-rose-600 dark:text-rose-400 shadow-xs'
                           : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                       )}
                     >
-                      {p === '1d' ? '1日佔比 Top 10' : p === '6d' ? '6日佔比 Top 10' : '12日佔比 Top 10'}
+                      <span className="sm:hidden">{p === '1d' ? '1日佔比' : p === '6d' ? '6日佔比' : '12日佔比'}</span>
+                      <span className="hidden sm:inline">{p === '1d' ? '1日佔比 Top 10' : p === '6d' ? '6日佔比 Top 10' : '12日佔比 Top 10'}</span>
                     </button>
                   ))}
                 </div>

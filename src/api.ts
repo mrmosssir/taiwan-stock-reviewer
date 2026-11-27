@@ -3,6 +3,15 @@ import axios from 'axios';
 const CLOUD_API_URL = 'https://cloud-stock-chooser.mrmosssir.workers.dev/api/stock-history';
 const CLOUD_PROXY_QUOTE_URL = 'https://cloud-stock-chooser.mrmosssir.workers.dev/api/get-realtime-quotes';
 
+export interface StockConceptTag {
+  id: string;
+  name: string;
+  kind: 'theme' | 'chain';
+  tier?: string | null;
+  stageRole?: string | null;
+  detail?: string | null;
+}
+
 export interface StockTicker {
   symbol: string;
   name: string;
@@ -14,6 +23,7 @@ export interface StockTicker {
   lastClose?: number | null;
   lastChange?: number | null;
   lastChangePct?: number | null;
+  concepts?: StockConceptTag[];
 }
 
 export interface StockQuote {
@@ -179,6 +189,7 @@ export const fetchTicker = async (symbol: string): Promise<StockTicker> => {
       lastClose: data.lastClose !== null && data.lastClose !== undefined ? Number(data.lastClose) : null,
       lastChange: data.lastChange !== null && data.lastChange !== undefined ? Number(data.lastChange) : null,
       lastChangePct: data.lastChangePct !== null && data.lastChangePct !== undefined ? Number(data.lastChangePct) : null,
+      concepts: Array.isArray(data.concepts) ? data.concepts : [],
     };
   } catch (e) {
     console.error('Error fetching ticker info from backend:', e);
@@ -193,6 +204,7 @@ export const fetchTicker = async (symbol: string): Promise<StockTicker> => {
       lastClose: null,
       lastChange: null,
       lastChangePct: null,
+      concepts: [],
     };
   }
 };
@@ -588,6 +600,82 @@ export interface IndustryStocksResponse {
   activeCount: number;
   data: IndustryStockItem[];
 }
+
+export interface ConceptCategoryItem {
+  id: string;
+  name: string;
+  nameEn: string;
+  kind: 'theme' | 'chain';
+  asOf: string;
+  totalCount: number;
+  activeCount: number;
+  upCount: number;
+  downCount: number;
+  avgChangePct: number;
+  lastDate: string;
+}
+
+export interface ConceptsResponse {
+  date: string;
+  concepts: ConceptCategoryItem[];
+}
+
+export interface ConceptStockItem extends IndustryStockItem {
+  tier?: string | null;
+  stage?: string | null;
+  stageRole?: string | null;
+  detail?: string | null;
+}
+
+export interface ConceptStocksResponse {
+  id: string;
+  name: string;
+  nameEn: string;
+  kind: 'theme' | 'chain';
+  asOf: string;
+  lastDate: string;
+  total: number;
+  activeCount: number;
+  data: ConceptStockItem[];
+}
+
+export const fetchConcepts = async (): Promise<ConceptsResponse> => {
+  const response = await fetch('https://cloud-stock-chooser.mrmosssir.workers.dev/api/concepts');
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const result = await response.json();
+  if (!result.success || !Array.isArray(result.concepts)) {
+    throw new Error(result.error || 'Failed to load concepts');
+  }
+  return {
+    date: result.date || '',
+    concepts: result.concepts,
+  };
+};
+
+export const fetchConceptStocks = async (conceptId: string): Promise<ConceptStocksResponse> => {
+  const url = `https://cloud-stock-chooser.mrmosssir.workers.dev/api/concept-stocks?id=${encodeURIComponent(conceptId)}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const result = await response.json();
+  if (!result.success || !Array.isArray(result.data)) {
+    throw new Error(result.error || 'Failed to load concept stocks');
+  }
+  return {
+    id: result.id || conceptId,
+    name: result.name || conceptId,
+    nameEn: result.nameEn || '',
+    kind: result.kind === 'chain' ? 'chain' : 'theme',
+    asOf: result.asOf || '',
+    lastDate: result.lastDate || '',
+    total: Number(result.total) || result.data.length,
+    activeCount: Number(result.activeCount) || 0,
+    data: result.data,
+  };
+};
 
 export const fetchIndustries = async (): Promise<IndustriesResponse> => {
   const response = await fetch('https://cloud-stock-chooser.mrmosssir.workers.dev/api/industries');

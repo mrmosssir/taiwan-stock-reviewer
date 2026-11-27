@@ -9,16 +9,32 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { fetchIndustryStocks, type IndustryStockItem } from '../api';
+import {
+  fetchIndustryStocks,
+  fetchConceptStocks,
+  type ConceptStockItem,
+} from '../api';
 import clsx from 'clsx';
 
 const PAGE_SIZE = 30;
 
-export const IndustryStocks = () => {
-  const { industry: rawIndustry } = useParams<{ industry: string }>();
-  const industry = rawIndustry ? decodeURIComponent(rawIndustry) : '';
+const TIER_LABELS: Record<string, string> = {
+  upstream: '上游',
+  midstream: '中游',
+  downstream: '下游',
+};
 
-  const [stocks, setStocks] = useState<IndustryStockItem[]>([]);
+export const IndustryStocks = () => {
+  const { industry: rawIndustry, conceptId: rawConceptId } = useParams<{
+    industry?: string;
+    conceptId?: string;
+  }>();
+  const isConceptMode = Boolean(rawConceptId);
+  const industry = rawIndustry ? decodeURIComponent(rawIndustry) : '';
+  const conceptId = rawConceptId ? decodeURIComponent(rawConceptId) : '';
+
+  const [title, setTitle] = useState<string>(isConceptMode ? '' : industry);
+  const [stocks, setStocks] = useState<ConceptStockItem[]>([]);
   const [lastDate, setLastDate] = useState<string>('');
   const [activeCount, setActiveCount] = useState<number>(0);
   const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
@@ -29,22 +45,33 @@ export const IndustryStocks = () => {
   const rafLockRef = useRef<boolean>(false);
 
   const loadStocks = useCallback(async () => {
-    if (!industry) return;
+    if (isConceptMode && !conceptId) return;
+    if (!isConceptMode && !industry) return;
+
     setIsLoading(true);
     setError(null);
     setVisibleCount(PAGE_SIZE);
     try {
-      const res = await fetchIndustryStocks(industry);
-      setStocks(res.data);
-      setLastDate(res.lastDate);
-      setActiveCount(res.activeCount);
+      if (isConceptMode) {
+        const res = await fetchConceptStocks(conceptId);
+        setTitle(res.name || conceptId);
+        setStocks(res.data);
+        setLastDate(res.lastDate);
+        setActiveCount(res.activeCount);
+      } else {
+        setTitle(industry);
+        const res = await fetchIndustryStocks(industry);
+        setStocks(res.data);
+        setLastDate(res.lastDate);
+        setActiveCount(res.activeCount);
+      }
     } catch (e) {
-      console.error('Failed to load industry stocks:', e);
+      console.error('Failed to load category stocks:', e);
       setError('載入分類個股失敗，請稍後重試');
     } finally {
       setIsLoading(false);
     }
-  }, [industry]);
+  }, [isConceptMode, conceptId, industry]);
 
   useEffect(() => {
     loadStocks();
@@ -74,6 +101,7 @@ export const IndustryStocks = () => {
   }, [hasMore, isLoading, stocks.length]);
 
   const visibleStocks = stocks.slice(0, visibleCount);
+  const backUrl = isConceptMode ? '/industries?tab=concepts' : '/industries';
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200 pb-12">
@@ -81,15 +109,15 @@ export const IndustryStocks = () => {
         <div className="max-w-4xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Link
-              to="/industries"
+              to={backUrl}
               className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors shrink-0"
-              title="返回產業分類"
+              title="返回分類選股"
             >
               <ArrowLeft size={20} />
             </Link>
             <div className="min-w-0">
               <h1 className="text-base sm:text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">
-                {industry || '個股列表'}
+                {title || '個股列表'}
               </h1>
               {!isLoading && !error && (
                 <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
@@ -163,18 +191,19 @@ export const IndustryStocks = () => {
                   const changePct = item.lastChangePct ?? 0;
                   const isUp = hasPrice && change > 0;
                   const isDown = hasPrice && change < 0;
+                  const tierLabel = item.tier ? TIER_LABELS[item.tier] || item.tier : null;
 
                   return (
                     <Link
                       key={item.symbol}
                       to={`/stock/${item.symbol}`}
                       className={clsx(
-                        'flex items-center justify-between gap-3 p-3.5 sm:p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors',
+                        'flex items-start sm:items-center justify-between gap-3 p-3.5 sm:p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors',
                         item.isActive && 'bg-orange-50/35 dark:bg-orange-950/15'
                       )}
                     >
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                      <div className="flex flex-col min-w-0 flex-1 gap-0.5">
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
                           <span className="font-bold text-gray-900 dark:text-white shrink-0">
                             {item.symbol}
                           </span>
@@ -189,11 +218,27 @@ export const IndustryStocks = () => {
                               <Flame size={15} className="text-orange-500 fill-orange-500" />
                             </span>
                           )}
+                          {isConceptMode && tierLabel && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300 shrink-0">
+                              {tierLabel}
+                            </span>
+                          )}
+                          {isConceptMode && item.stageRole === 'primary' && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 shrink-0">
+                              主力
+                            </span>
+                          )}
                         </div>
                         <span className="text-[11px] text-gray-400 dark:text-gray-500">
                           {item.type === 'tpex' ? '上櫃' : item.type === 'twse' ? '上市' : item.type}
+                          {isConceptMode && item.industry ? ` · ${item.industry}` : ''}
                           {item.isActive && item.signalDate ? ` · 啟動日 ${item.signalDate}` : ''}
                         </span>
+                        {isConceptMode && item.detail && (
+                          <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5 leading-relaxed">
+                            {item.detail}
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex flex-col items-end shrink-0 min-w-[82px]">

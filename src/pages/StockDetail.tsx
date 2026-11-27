@@ -18,7 +18,7 @@ import type {
 } from '../api';
 import { KLineChart } from '../components/KLineChart';
 import { MarginChart } from '../components/MarginChart';
-import { ArrowLeft, Users, CreditCard, PieChart, TrendingUp, BarChart3, Activity, Wallet, Star } from 'lucide-react';
+import { ArrowLeft, Users, CreditCard, PieChart, TrendingUp, BarChart3, Activity, Wallet, Star, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { calculateSignals, SIGNAL_STRATEGIES } from '../utils/signals';
 import { aggregateCandles, aggregateInstitutional } from '../utils/resample';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -32,10 +32,10 @@ const WatchlistDropdown = ({ symbol }: { symbol: string }) => {
   const isStarred = inFolders.length > 0;
   
   return (
-    <div className="relative inline-block ml-2">
+    <div className="relative inline-block shrink-0">
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center"
+        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center"
         title="加入/移除自選股"
       >
         <Star size={20} className={isStarred ? "fill-yellow-400 text-yellow-400" : "text-gray-400 dark:text-gray-500"} />
@@ -43,8 +43,8 @@ const WatchlistDropdown = ({ symbol }: { symbol: string }) => {
       
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
-          <div className="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 z-20 py-1">
+          <div className="fixed inset-0 z-20" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute right-0 sm:left-0 sm:right-auto mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 z-30 py-1">
             <div className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700 font-normal">
               加入至資料夾
             </div>
@@ -95,6 +95,11 @@ export const StockDetail: React.FC = () => {
   });
   const [isAdjusted, setIsAdjusted] = useState(false);
   const [activeStrategy, setActiveStrategy] = useState(SIGNAL_STRATEGIES[0].id);
+  const [showAllConcepts, setShowAllConcepts] = useState(false);
+
+  useEffect(() => {
+    setShowAllConcepts(false);
+  }, [symbol]);
 
   const baseCandles = useMemo(() => {
     return isAdjusted ? adjustCandles(rawCandles, dividends) : rawCandles;
@@ -169,18 +174,18 @@ export const StockDetail: React.FC = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 pb-20 transition-colors duration-200">
       <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
             <Link to="/" className="p-1.5 sm:p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors shrink-0">
               <ArrowLeft size={22} />
             </Link>
-            <div className="min-w-0">
-              <h1 className="text-base sm:text-xl font-bold flex items-center gap-1.5 sm:gap-2 dark:text-white truncate">
-                <span className="truncate">{ticker?.symbol} {ticker?.name}</span>
-                <span className="hidden sm:inline-block text-xs font-normal text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded shrink-0">
-                  {ticker?.market} {ticker?.type}
-                </span>
-                {ticker && <WatchlistDropdown symbol={ticker.symbol} />}
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <h1 className="text-base sm:text-xl font-bold dark:text-white truncate">
+                {ticker?.symbol} {ticker?.name}
               </h1>
+              <span className="hidden sm:inline-block text-xs font-normal text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded shrink-0">
+                {ticker?.market} {ticker?.type}
+              </span>
+              {ticker && <WatchlistDropdown symbol={ticker.symbol} />}
             </div>
           </div>
           <div className="shrink-0">
@@ -190,6 +195,29 @@ export const StockDetail: React.FC = () => {
       </nav>
 
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+        {/* 所屬概念題材標籤（手機單行可左右滑動，不擠壓 K 線第一屏） */}
+        {ticker?.concepts && ticker.concepts.length > 0 && (
+          <div className="mb-3 sm:mb-4 flex items-center gap-1.5 sm:gap-2 overflow-x-auto sm:overflow-visible sm:flex-wrap pb-1 sm:pb-0 scrollbar-hide">
+            <span className="text-[11px] sm:text-xs font-medium text-gray-400 dark:text-gray-500 mr-0.5 shrink-0">
+              概念題材：
+            </span>
+            {ticker.concepts.map((c) => (
+              <Link
+                key={c.id}
+                to={`/concepts/${encodeURIComponent(c.id)}`}
+                title={c.detail || c.name}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-medium border transition-colors whitespace-nowrap shrink-0 ${
+                  c.kind === 'theme'
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200/80 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/60 dark:hover:bg-indigo-900/50'
+                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200/70 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700'
+                }`}
+              >
+                <span>#{c.name}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
         {/* K-Line Chart Section */}
         <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-4 sm:mb-6 flex flex-wrap gap-3 sm:gap-4 items-center justify-between">
           <div className="flex items-center gap-1.5 sm:gap-2 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
@@ -251,6 +279,97 @@ export const StockDetail: React.FC = () => {
            />
         </div>
 
+        {/* 概念題材與產業定位說明 */}
+        {ticker?.concepts && ticker.concepts.length > 0 && (() => {
+          const TIER_LABELS: Record<string, string> = {
+            upstream: '上游',
+            midstream: '中游',
+            downstream: '下游',
+          };
+          const conceptsList = ticker.concepts;
+          const visibleConcepts = showAllConcepts ? conceptsList : conceptsList.slice(0, 3);
+          const hasMoreConcepts = conceptsList.length > 3;
+
+          return (
+            <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6 sm:mb-8">
+              <div className="flex items-center justify-between mb-4 border-l-4 border-indigo-500 pl-3">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200 font-bold">
+                  <Sparkles size={19} className="text-indigo-500" />
+                  <h3>概念題材與產業定位</h3>
+                  <span className="text-xs font-normal text-gray-400 dark:text-gray-500">
+                    ({conceptsList.length})
+                  </span>
+                </div>
+                {hasMoreConcepts && (
+                  <button
+                    onClick={() => setShowAllConcepts((v) => !v)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                  >
+                    <span>{showAllConcepts ? '收合' : `展開全部 ${conceptsList.length} 項`}</span>
+                    {showAllConcepts ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                )}
+              </div>
+
+              <div className="divide-y divide-gray-100 dark:divide-gray-700/70">
+                {visibleConcepts.map((c) => {
+                  const tierLabel = c.tier ? TIER_LABELS[c.tier] || c.tier : null;
+                  return (
+                    <div key={c.id} className="py-3 first:pt-0 last:pb-0">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                        <Link
+                          to={`/concepts/${encodeURIComponent(c.id)}`}
+                          className="text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                        >
+                          #{c.name}
+                        </Link>
+                        <span
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                            c.kind === 'theme'
+                              ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-300'
+                              : 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-300'
+                          }`}
+                        >
+                          {c.kind === 'theme' ? '概念' : '產業鏈'}
+                        </span>
+                        {tierLabel && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
+                            {tierLabel}
+                          </span>
+                        )}
+                        {c.stageRole === 'primary' && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                            主力
+                          </span>
+                        )}
+                      </div>
+                      {c.detail ? (
+                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                          {c.detail}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                          尚無詳細產業說明
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {hasMoreConcepts && !showAllConcepts && (
+                <button
+                  onClick={() => setShowAllConcepts(true)}
+                  className="mt-3 w-full py-2 rounded-xl text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50/60 dark:bg-indigo-950/30 hover:bg-indigo-100/70 dark:hover:bg-indigo-900/40 transition-colors cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <span>顯示其餘 {conceptsList.length - 3} 項概念與產業說明</span>
+                  <ChevronDown size={14} />
+                </button>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Info Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
           {/* Institutional Investors */}
@@ -283,8 +402,8 @@ export const StockDetail: React.FC = () => {
           </div>
 
           {/* Margin Trading */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-4 border-l-4 border-orange-500 pl-3">
+          <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div className="flex flex-wrap items-center justify-between gap-1 mb-4 border-l-4 border-orange-500 pl-3">
               <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200 font-bold">
                 <CreditCard size={20} className="text-orange-500" />
                 <h3>融資融券趨勢 (近一個月)</h3>

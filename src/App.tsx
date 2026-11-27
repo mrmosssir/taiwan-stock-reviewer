@@ -16,6 +16,7 @@ function App() {
           <Route path="/market" element={<MarketOverview />} />
           <Route path="/industries" element={<Industries />} />
           <Route path="/industries/:industry" element={<IndustryStocks />} />
+          <Route path="/concepts/:conceptId" element={<IndustryStocks />} />
           <Route path="/stock/:symbol" element={<StockDetail />} />
         </Routes>
       </WatchlistProvider>
